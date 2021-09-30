@@ -1,0 +1,22 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "twottle"
+authors = [{name = "Raeed Ahmed", email = "ruahmed7868@gmail.com"}]
+readme = "README.md"
+classifiers = ["License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"]
+dynamic = ["version", "description"]
+
+dependencies = [
+	"bottle",
+	"peewee",
+	"httpx",
+]
+
+[project.urls]
+Home = "https://github.com/RaeedAhmed/twottle"
+
+[project.scripts]
+twottle = "twottle.app:main"
