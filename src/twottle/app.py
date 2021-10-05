@@ -8,19 +8,26 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from subprocess import DEVNULL, Popen
 from types import SimpleNamespace
-from typing import NoReturn, Optional, Union
+from typing import Optional
 
 import bottle as bt
 import httpx
 import peewee as pw
 
-# ---------------------------------- Logging --------------------------------- #
+module_path = Path(__file__).absolute().parent  # src/twottle
+bt.TEMPLATE_PATH.insert(0, str(Path.joinpath(module_path, "views")))
+static_path = Path.joinpath(module_path, "static")
+
+# +--------------------------------╔═════════╗-------------------------------+ #
+# |::::::::::::::::::::::::::::::::║ Logging ║:::::::::::::::::::::::::::::::| #
+# +--------------------------------╚═════════╝-------------------------------+ #
+
 # Logger object
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 # Create handlers for console and file
 c_handler = logging.StreamHandler()
-f_handler = logging.FileHandler("debug.log")
+f_handler = logging.FileHandler(Path.joinpath(module_path, "debug.log"))
 c_handler.setLevel(logging.INFO)
 f_handler.setLevel(logging.DEBUG)
 # Format for console and file
@@ -34,12 +41,14 @@ f_handler.setFormatter(f_format)
 # Add handlers to the logger
 logger.addHandler(c_handler)
 logger.addHandler(f_handler)
-# ---------------------------------------------------------------------------- #
+
+# +--------------------------------╔════════╗--------------------------------+ #
+# |::::::::::::::::::::::::::::::::║ Config ║::::::::::::::::::::::::::::::::| #
+# +--------------------------------╚════════╝--------------------------------+ #
 
 
-# ---------------------------------- Config ---------------------------------- #
 class Config(ConfigParser):
-    path = "static/config.ini"
+    path = Path.joinpath(module_path, "config.ini")
 
     def update(self):
         with open(Config.path, "w") as file:
@@ -66,10 +75,17 @@ class Config(ConfigParser):
         return changes
 
 
+# init config
 config = Config()
 config.read(Config.path)
-Path("cache/users").mkdir(exist_ok=True, parents=True)
-Path("cache/games").mkdir(exist_ok=True, parents=True)
+
+# cache
+cache_path = Path.joinpath(module_path, "cache")
+user_cache = Path.joinpath(module_path, "cache/users")
+games_cache = Path.joinpath(module_path, "cache/games")
+user_cache.mkdir(exist_ok=True, parents=True)
+games_cache.mkdir(exist_ok=True, parents=True)
+
 static_pages = [
     "authenticate",
     "config",
@@ -80,11 +96,12 @@ static_pages = [
     "cache/",
     "watch",
 ]
-# ---------------------------------------------------------------------------- #
 
+# +-------------------------------╔══════════╗-------------------------------+ #
+# |:::::::::::::::::::::::::::::::║ Database ║:::::::::::::::::::::::::::::::| #
+# +-------------------------------╚══════════╝-------------------------------+ #
 
-# --------------------------------- Database --------------------------------- #
-db = pw.SqliteDatabase("data.db")
+db = pw.SqliteDatabase(Path.joinpath(module_path, "data.db"))
 
 
 class BaseModel(pw.Model):
@@ -116,10 +133,10 @@ class Game(BaseModel):
     box_art_url = pw.TextField()
 
 
-# ---------------------------------------------------------------------------- #
+# +------------------------------╔═══════════╗-------------------------------+ #
+# |::::::::::::::::::::::::::::::║ Processes ║:::::::::::::::::::::::::::::::| #
+# +------------------------------╚═══════════╝-------------------------------+ #
 
-
-# -------------------------------- Processes --------------------------------- #
 class Media:
     procs: list = []
 
@@ -148,17 +165,21 @@ class Media:
             cls.procs.remove(proc)
 
 
-# ---------------------------------------------------------------------------- #
+# +-----------------------------╔══════════════╗-----------------------------+ #
+# |:::::::::::::::::::::::::::::║ Type Aliases ║:::::::::::::::::::::::::::::| #
+# +-----------------------------╚══════════════╝-----------------------------+ #
 
-# ------------------------------- Type Aliases ------------------------------- #
 Image = namedtuple("Image", "id url")
 Stream = SimpleNamespace
 UtcTime = str
 ElapsedTime = str
 JSON = dict
 Headers = JSON[str, str]
-# ---------------------------------------------------------------------------- #
 
+
+# +-----------------------------╔══════════════╗-----------------------------+ #
+# |:::::::::::::::::::::::::::::║ API Requests ║:::::::::::::::::::::::::::::| #
+# +-----------------------------╚══════════════╝-----------------------------+ #
 
 class Helix:
     client_id = "o232r2a1vuu2yfki7j3208tvnx8uzq"
@@ -166,9 +187,9 @@ class Helix:
     app_scopes = "user:edit+user:read:follows+user:read:subscriptions"
     base = "https://api.twitch.tv/helix"
     oauth = (
-        "https://id.twitch.tv/oauth2/authorize?client_id="
-        f"{client_id}&redirect_uri={redirect_uri}"
-        f"&response_type=token&scope={app_scopes}"
+        "https://id.twitch.tv/oauth2/authorize?client_id=" +
+        f"{client_id}&redirect_uri={redirect_uri}" +
+        f"&response_type=token&scope={app_scopes}" +
         "&force_verify=true"
     )
 
@@ -218,7 +239,7 @@ class AsyncRequest:
     #         pass
 
     async def get_batch(self, id_key="id") -> list[dict]:
-        id_lists = [self.ids[x : x + 100] for x in range(0, len(self.ids), 100)]
+        id_lists = [self.ids[x: x + 100] for x in range(0, len(self.ids), 100)]
         async with self.session:
             resps = await asyncio.gather(
                 *(
@@ -231,8 +252,8 @@ class AsyncRequest:
         return data
 
 
-def cache(ids: set[int], model: Union[Streamer, Game]) -> NoReturn:
-    endpoint = "/users" if model is Streamer else "/games"
+def cache(ids: set[int], model: BaseModel) -> None:
+    endpoint, cachedir = ("/users", user_cache) if model is Streamer else ("/games", games_cache)
     image_tag = "profile_image_url" if model is Streamer else "box_art_url"
     tmp = {i for i in ids if model.get_or_none(i) is None}
     logger.debug(f"{model} to cache: {tmp} from {ids}")
@@ -249,9 +270,10 @@ def cache(ids: set[int], model: Union[Streamer, Game]) -> NoReturn:
     images = [Image(datum["id"], datum[image_tag]) for datum in data]
     logger.debug(f"Downloading {len(images)} images")
 
-    def download_image(image: Image) -> NoReturn:
+    def download_image(image: Image) -> None:
         data = httpx.get(image.url).content
-        with open(f"cache{endpoint}/{image.id}.jpg", "wb") as f:
+        imgpath = Path.joinpath(cachedir, f"{image.id}.jpg")
+        with open(imgpath, "wb") as f:
             f.write(data)
 
     with ThreadPoolExecutor() as tp:
@@ -262,21 +284,23 @@ def cache(ids: set[int], model: Union[Streamer, Game]) -> NoReturn:
         datum[image_tag] = f"cache{endpoint}/{datum['id']}.jpg"
         model.create(**datum)
 
-# +---------------------------------| #
-# |             Hello               | #
-# +---------------------------------| #
-def get_user(access_token: str) -> NoReturn:
+
+def get_user(access_token: str) -> None:
     headers = {"Client-ID": Helix.client_id, "Authorization": f"Bearer {access_token}"}
     endpoint = f"{Helix.base}/users"
     logger.debug(f"GET {endpoint} headers {headers}")
-    user: Optional[dict] = httpx.get(endpoint, headers=headers, timeout=None).json()["data"][0]
+    user: dict = httpx.get(endpoint, headers=headers, timeout=None).json()["data"][0]
     logger.info(f"User {user['display_name']}")
     user["access_token"] = access_token
     User.create_table()
     User.create(**user)
 
+# +--------------------------------╔═══════╗---------------------------------+ #
+# |::::::::::::::::::::::::::::::::║ Tests ║:::::::::::::::::::::::::::::::::| #
+# +--------------------------------╚═══════╝---------------------------------+ #
 
-def check_user() -> NoReturn:
+
+def check_user() -> None:
     logger.debug("Checking user")
     if db.table_exists("user") is False or User.get_or_none() is None:
         logger.debug("No user table")
@@ -294,6 +318,10 @@ def check_cache():
         Streamer.update(followed=True).execute()
 
 
+# +------------------------------╔════════════╗------------------------------+ #
+# |::::::::::::::::::::::::::::::║ Fetch Data ║::::::::::::::::::::::::::::::| #
+# +------------------------------╚════════════╝------------------------------+ #
+
 def get_follows() -> set[int]:
     endpoint = "/users/follows"
     params = {"from_id": User.get().id, "first": "100"}
@@ -301,7 +329,7 @@ def get_follows() -> set[int]:
     return {int(follow["to_id"]) for follow in resp}
 
 
-def update_follows() -> NoReturn:
+def update_follows() -> None:
     follows = get_follows()
     cache(follows, Streamer)
     streamers: list[Streamer] = [streamer for streamer in Streamer.select()]
@@ -349,6 +377,10 @@ def format_streams(streams: list[dict]) -> list[Stream]:
     streams.sort(key=lambda stream: stream.viewer_count, reverse=True)
     return streams
 
+# +------------------------------╔═════════════╗-----------------------------+ #
+# |::::::::::::::::::::::::::::::║ Route Hooks ║:::::::::::::::::::::::::::::| #
+# +------------------------------╚═════════════╝-----------------------------+ #
+
 
 @bt.hook("before_request")
 def _connect():
@@ -366,6 +398,10 @@ def _close():
     if not db.is_closed():
         db.close()
 
+
+# +--------------------------╔════════════════════╗--------------------------+ #
+# |::::::::::::::::::::::::::║ Application Routes ║::::::::::::::::::::::::::| #
+# +--------------------------╚════════════════════╝--------------------------+ #
 
 @bt.route("/")
 def index():
@@ -420,17 +456,21 @@ def watching():
 
 @bt.route("/static/<filename:path>")
 def send_static(filename):
-    return bt.static_file(filename, root="static/")
+    return bt.static_file(filename, root=str(static_path))
 
 
 @bt.route("/cache/<filename:path>")
 def send_image(filename):
-    return bt.static_file(filename, root="cache/", mimetype="image/jpeg")
+    return bt.static_file(filename, root=str(cache_path), mimetype="image/jpeg")
 
 
 @bt.route("/c/<channel>")
 def channel():
     pass
+
+# +------------------------------╔═══════════╗-------------------------------+ #
+# |::::::::::::::::::::::::::::::║ Utilities ║:::::::::::::::::::::::::::::::| #
+# +------------------------------╚═══════════╝-------------------------------+ #
 
 
 def time_elapsed(start: UtcTime, d="") -> ElapsedTime:

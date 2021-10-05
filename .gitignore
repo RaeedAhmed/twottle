@@ -14,3 +14,5 @@ build/
 .vscode/
 
 cache/
+debug.log
+data.db
