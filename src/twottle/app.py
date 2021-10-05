@@ -18,6 +18,7 @@ module_path = Path(__file__).absolute().parent  # src/twottle
 bt.TEMPLATE_PATH.insert(0, str(Path.joinpath(module_path, "views")))
 static_path = Path.joinpath(module_path, "static")
 
+
 # +--------------------------------╔═════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Logging ║:::::::::::::::::::::::::::::::| #
 # +--------------------------------╚═════════╝-------------------------------+ #
@@ -41,6 +42,7 @@ f_handler.setFormatter(f_format)
 # Add handlers to the logger
 logger.addHandler(c_handler)
 logger.addHandler(f_handler)
+
 
 # +--------------------------------╔════════╗--------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Config ║::::::::::::::::::::::::::::::::| #
@@ -137,11 +139,13 @@ class Game(BaseModel):
 # |::::::::::::::::::::::::::::::║ Processes ║:::::::::::::::::::::::::::::::| #
 # +------------------------------╚═══════════╝-------------------------------+ #
 
+
 class Media:
     procs: list = []
 
     def __init__(self, command: list[str], info: bt.FormsDict):
         self.runtime = Popen(command, stdout=DEVNULL)
+        info.append("pid", self.runtime.pid)
         self.info = info
         logger.debug(f"proc command: {command}\nproc info: {info}")
         Media.procs.append(self)
@@ -150,7 +154,6 @@ class Media:
     def wipe(cls):
         for proc in cls.procs:
             proc.runtime.terminate()
-            proc.runtime.kill()
         cls.procs.clear()
 
     @classmethod
@@ -161,8 +164,14 @@ class Media:
                 to_dump.append(proc)
         for proc in to_dump:
             proc.runtime.terminate()
-            proc.runtime.kill()
             cls.procs.remove(proc)
+
+    @classmethod
+    def kill(cls, pid: int):
+        for proc in cls.procs:
+            if proc.info.pid == pid:
+                proc.runtime.terminate()
+                cls.procs.remove(proc)
 
 
 # +-----------------------------╔══════════════╗-----------------------------+ #
@@ -181,15 +190,16 @@ Headers = JSON[str, str]
 # |:::::::::::::::::::::::::::::║ API Requests ║:::::::::::::::::::::::::::::| #
 # +-----------------------------╚══════════════╝-----------------------------+ #
 
+
 class Helix:
     client_id = "o232r2a1vuu2yfki7j3208tvnx8uzq"
     redirect_uri = "http://localhost:8080/authenticate"
     app_scopes = "user:edit+user:read:follows+user:read:subscriptions"
     base = "https://api.twitch.tv/helix"
     oauth = (
-        "https://id.twitch.tv/oauth2/authorize?client_id=" +
-        f"{client_id}&redirect_uri={redirect_uri}" +
-        f"&response_type=token&scope={app_scopes}" +
+        "https://id.twitch.tv/oauth2/authorize?client_id="
+        f"{client_id}&redirect_uri={redirect_uri}"
+        f"&response_type=token&scope={app_scopes}"
         "&force_verify=true"
     )
 
@@ -239,7 +249,7 @@ class AsyncRequest:
     #         pass
 
     async def get_batch(self, id_key="id") -> list[dict]:
-        id_lists = [self.ids[x: x + 100] for x in range(0, len(self.ids), 100)]
+        id_lists = [self.ids[x : x + 100] for x in range(0, len(self.ids), 100)]
         async with self.session:
             resps = await asyncio.gather(
                 *(
@@ -295,6 +305,7 @@ def get_user(access_token: str) -> None:
     User.create_table()
     User.create(**user)
 
+
 # +--------------------------------╔═══════╗---------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Tests ║:::::::::::::::::::::::::::::::::| #
 # +--------------------------------╚═══════╝---------------------------------+ #
@@ -321,6 +332,7 @@ def check_cache():
 # +------------------------------╔════════════╗------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Fetch Data ║::::::::::::::::::::::::::::::| #
 # +------------------------------╚════════════╝------------------------------+ #
+
 
 def get_follows() -> set[int]:
     endpoint = "/users/follows"
@@ -377,6 +389,7 @@ def format_streams(streams: list[dict]) -> list[Stream]:
     streams.sort(key=lambda stream: stream.viewer_count, reverse=True)
     return streams
 
+
 # +------------------------------╔═════════════╗-----------------------------+ #
 # |::::::::::::::::::::::::::::::║ Route Hooks ║:::::::::::::::::::::::::::::| #
 # +------------------------------╚═════════════╝-----------------------------+ #
@@ -402,6 +415,7 @@ def _close():
 # +--------------------------╔════════════════════╗--------------------------+ #
 # |::::::::::::::::::::::::::║ Application Routes ║::::::::::::::::::::::::::| #
 # +--------------------------╚════════════════════╝--------------------------+ #
+
 
 @bt.route("/")
 def index():
@@ -448,8 +462,14 @@ def watch():
     return """<script>setTimeout(function () { window.history.back() });</script>"""
 
 
-@bt.route("/watching")
+@bt.route("/watching", method=["GET", "POST"])
 def watching():
+    if bt.request.method == "POST":
+        if pid := bt.request.forms.get("pid"):
+            Media.kill(int(pid))
+        if bt.request.forms.get("wipe"):
+            Media.wipe()
+        return bt.redirect("/watching")
     Media.update()
     return bt.template("watching.tpl", procs=Media.procs)
 
@@ -468,6 +488,7 @@ def send_image(filename):
 def channel():
     pass
 
+
 # +------------------------------╔═══════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Utilities ║:::::::::::::::::::::::::::::::| #
 # +------------------------------╚═══════════╝-------------------------------+ #
@@ -480,7 +501,7 @@ def time_elapsed(start: UtcTime, d="") -> ElapsedTime:
     delta = str(timedelta(seconds=elapsed))
     if "d" in delta:
         d = delta[: (delta.find("d") - 1)] + "d"
-    h, m, s = delta.split(" ")[-1].split(":")
+    h, m, _ = delta.split(" ")[-1].split(":")
     return f"{d}{h}h{m}m"
 
 
@@ -491,7 +512,16 @@ def watch_video(info: bt.FormsDict):
     command = shlex.split(
         f"streamlink -l none -p {c['app']} -a '{c['app_args']}' {c['sl_args']} {info.url} best"
     )
-    proc = Media(command, info)
+    Media(command, info)
+
+
+# +------------------------╔════════════════════════╗------------------------+ #
+# |::::::::::::::::::::::::║ Command Line Interface ║::::::::::::::::::::::::| #
+# +------------------------╚════════════════════════╝------------------------+ #
+
+
+def cli():
+    pass
 
 
 def main():
