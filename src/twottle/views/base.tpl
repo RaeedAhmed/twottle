@@ -1,4 +1,4 @@
-% setdefault('title', 'twitch-py')
+% setdefault('title', 'twottle')
 <!DOCTYPE html>
 <html lang="en">
 

@@ -1,6 +1,8 @@
+import argparse
 import asyncio
 import logging
 import shlex
+import shutil
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from configparser import ConfigParser
@@ -13,6 +15,8 @@ from typing import Optional
 import bottle as bt
 import httpx
 import peewee as pw
+
+import twottle
 
 module_path = Path(__file__).absolute().parent  # src/twottle
 bt.TEMPLATE_PATH.insert(0, str(Path.joinpath(module_path, "views")))
@@ -520,14 +524,46 @@ def watch_video(info: bt.FormsDict):
 # +------------------------╚════════════════════════╝------------------------+ #
 
 
-def cli():
-    pass
+def cli() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Web GUI for streamlink cli with Twitch account integration"
+    )
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--reset", action="store_true", help="reset config file")
+    actions.add_argument(
+        "-c", "--clear-data", action="store_true", help="remove all user data and cache"
+    )
+    actions.add_argument(
+        "-d", "--dump-cache", action="store_true", help="clear cache, stay logged in."
+    )
+    actions.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"twottle v{twottle.__version__}",
+    )
+    return parser
 
 
 def main():
-    print(__file__)
-    logger.info("Go to http://localhost:8080")
-    bt.run(host="localhost", debug=True, quiet=True)
+    parser = cli()
+    args = parser.parse_args()
+    if args.reset:
+        Config.reset()
+    elif args.clear_data:
+        db.drop_tables([User, Streamer, Game])
+        shutil.rmtree(cache_path)
+    elif args.dump_cache:
+        db.drop_tables([Streamer, Game])
+    else:
+        logger.info("Go to http://localhost:8080")
+        try:
+            bt.run(host="localhost", quiet=True)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            print("\nStopping application...")
+            exit()
 
 
 if __name__ == "__main__":
