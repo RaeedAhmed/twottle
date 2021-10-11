@@ -28,27 +28,26 @@ static_path = Path.joinpath(module_path, "static")
 # |::::::::::::::::::::::::::::::::║ Logging ║:::::::::::::::::::::::::::::::| #
 # +--------------------------------╚═════════╝-------------------------------+ #
 
-logging.config.fileConfig(Path.joinpath(module_path, "config/logger.conf"))
-logger = logging.getLogger('twottle')
-# # Logger object
-# logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG)
-# # Create handlers for console and file
-# c_handler = logging.StreamHandler()
-# f_handler = logging.FileHandler(Path.joinpath(module_path, "debug.log"), mode='w')
-# c_handler.setLevel(logging.INFO)
-# f_handler.setLevel(logging.DEBUG)
-# # Format for console and file
-# c_format = logging.Formatter("\n%(message)s")
-# f_format = logging.Formatter(
-#     fmt="\n%(asctime)s\n%(lineno)d: %(funcName)s\n%(message)s",
-#     datefmt="%m/%d/%Y %I:%M:%S %p",
-# )
-# c_handler.setFormatter(c_format)
-# f_handler.setFormatter(f_format)
-# # Add handlers to the logger
-# logger.addHandler(c_handler)
-# logger.addHandler(f_handler)
+# Logger object
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+# Create handlers for console and file
+c_handler = logging.StreamHandler()
+f_handler = logging.FileHandler(Path.joinpath(module_path, "debug.log"), mode="w")
+c_handler.setLevel(logging.INFO)
+f_handler.setLevel(logging.DEBUG)
+# Format for console and file
+c_format = logging.Formatter("\n%(message)s")
+f_format = logging.Formatter(
+    fmt="\n%(asctime)s\n%(lineno)d: %(funcName)s\n%(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
+c_handler.setFormatter(c_format)
+f_handler.setFormatter(f_format)
+# Add handlers to the logger
+logger.addHandler(c_handler)
+logger.addHandler(f_handler)
+
 
 # +--------------------------------╔════════╗--------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Config ║::::::::::::::::::::::::::::::::| #
@@ -56,7 +55,7 @@ logger = logging.getLogger('twottle')
 
 
 class Config(ConfigParser):
-    path = Path.joinpath(module_path, "config/config.ini")
+    path = Path.joinpath(module_path, "config.ini")
 
     def update(self):
         with open(Config.path, "w") as file:
@@ -563,7 +562,7 @@ def main():
     else:
         logger.info("Go to http://localhost:8080")
         try:
-            bt.run(server="waitress", host="localhost", port=8080, quiet=True, threads=16)
+            bt.run(host="localhost", port=8080, quiet=True, threads=16)
         except KeyboardInterrupt:
             pass
         finally:
