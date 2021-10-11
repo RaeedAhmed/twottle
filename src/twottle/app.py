@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import logging.config
 import shlex
 import shutil
 from collections import namedtuple
@@ -27,26 +28,27 @@ static_path = Path.joinpath(module_path, "static")
 # |::::::::::::::::::::::::::::::::║ Logging ║:::::::::::::::::::::::::::::::| #
 # +--------------------------------╚═════════╝-------------------------------+ #
 
-# Logger object
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-# Create handlers for console and file
-c_handler = logging.StreamHandler()
-f_handler = logging.FileHandler(Path.joinpath(module_path, "debug.log"))
-c_handler.setLevel(logging.INFO)
-f_handler.setLevel(logging.DEBUG)
-# Format for console and file
-c_format = logging.Formatter("\n%(message)s")
-f_format = logging.Formatter(
-    fmt="\n%(asctime)s\n%(lineno)d: %(funcName)s\n%(message)s",
-    datefmt="%m/%d/%Y %I:%M:%S %p",
-)
-c_handler.setFormatter(c_format)
-f_handler.setFormatter(f_format)
-# Add handlers to the logger
-logger.addHandler(c_handler)
-logger.addHandler(f_handler)
-
+logging.config.fileConfig(Path.joinpath(module_path, "config/logger.conf"))
+logger = logging.getLogger('twottle')
+# # Logger object
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.DEBUG)
+# # Create handlers for console and file
+# c_handler = logging.StreamHandler()
+# f_handler = logging.FileHandler(Path.joinpath(module_path, "debug.log"), mode='w')
+# c_handler.setLevel(logging.INFO)
+# f_handler.setLevel(logging.DEBUG)
+# # Format for console and file
+# c_format = logging.Formatter("\n%(message)s")
+# f_format = logging.Formatter(
+#     fmt="\n%(asctime)s\n%(lineno)d: %(funcName)s\n%(message)s",
+#     datefmt="%m/%d/%Y %I:%M:%S %p",
+# )
+# c_handler.setFormatter(c_format)
+# f_handler.setFormatter(f_format)
+# # Add handlers to the logger
+# logger.addHandler(c_handler)
+# logger.addHandler(f_handler)
 
 # +--------------------------------╔════════╗--------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Config ║::::::::::::::::::::::::::::::::| #
@@ -54,7 +56,7 @@ logger.addHandler(f_handler)
 
 
 class Config(ConfigParser):
-    path = Path.joinpath(module_path, "config.ini")
+    path = Path.joinpath(module_path, "config/config.ini")
 
     def update(self):
         with open(Config.path, "w") as file:
@@ -217,9 +219,13 @@ class Helix:
 
 class Request:
     def __init__(self, endpoint: str, params: dict):
+        transport = httpx.HTTPTransport(retries=3)
         self.params = params
         self.session = httpx.Client(
-            base_url=Helix.base + endpoint, headers=Helix.headers(), params=params
+            base_url=Helix.base + endpoint,
+            headers=Helix.headers(),
+            params=params,
+            transport=transport,
         )
 
     def get(self) -> list[dict]:
@@ -245,7 +251,10 @@ class Request:
 
 class AsyncRequest:
     def __init__(self, endpoint: str, ids: set):
-        self.session = httpx.AsyncClient(base_url=Helix.base + endpoint, headers=Helix.headers())
+        transport = httpx.AsyncHTTPTransport(retries=3)
+        self.session = httpx.AsyncClient(
+            base_url=Helix.base + endpoint, headers=Helix.headers(), transport=transport
+        )
         self.ids = list(ids)
 
     # async def get(self):
@@ -269,8 +278,7 @@ class AsyncRequest:
 def cache(ids: set[int], model: BaseModel) -> None:
     endpoint, cachedir = ("/users", user_cache) if model is Streamer else ("/games", games_cache)
     image_tag = "profile_image_url" if model is Streamer else "box_art_url"
-    tmp = {i for i in ids if model.get_or_none(i) is None}
-    logger.debug(f"{model} to cache: {tmp} from {ids}")
+    tmp = {i for i in ids if model.get_or_none(model.id == i) is None}
     if not tmp:
         return None
     data = asyncio.run(AsyncRequest(endpoint, tmp).get_batch())
@@ -282,7 +290,6 @@ def cache(ids: set[int], model: BaseModel) -> None:
         else:
             datum["box_art_url"] = datum["box_art_url"].replace("-{width}x{height}", "-285x380")
     images = [Image(datum["id"], datum[image_tag]) for datum in data]
-    logger.debug(f"Downloading {len(images)} images")
 
     def download_image(image: Image) -> None:
         data = httpx.get(image.url).content
@@ -302,7 +309,6 @@ def cache(ids: set[int], model: BaseModel) -> None:
 def get_user(access_token: str) -> None:
     headers = {"Client-ID": Helix.client_id, "Authorization": f"Bearer {access_token}"}
     endpoint = f"{Helix.base}/users"
-    logger.debug(f"GET {endpoint} headers {headers}")
     user: dict = httpx.get(endpoint, headers=headers, timeout=None).json()["data"][0]
     logger.info(f"User {user['display_name']}")
     user["access_token"] = access_token
@@ -374,7 +380,6 @@ def format_streams(streams: list[dict]) -> list[Stream]:
         futures = []
         for args in (("game_id", Game), ("user_id", Streamer)):
             ids = {int(i) for stream in streams if (i := stream[args[0]])}
-            logger.debug(f"{args[1]}\n{ids}")
             futures.append(tp.submit(cache(ids, args[1])))
         for future in as_completed(futures):
             future.done()
@@ -383,11 +388,11 @@ def format_streams(streams: list[dict]) -> list[Stream]:
         channel = Streamer.get_by_id(stream.user_id)
         stream.profile_image_url = channel.profile_image_url
         stream.uptime = time_elapsed(stream.started_at)
-        stream.thumbnail_url = stream.thumbnail_url.replace("-{width}x{height}", "")
-        try:
-            game = Game.get_by_id(stream.game_id)
+        stream.thumbnail_url = stream.thumbnail_url.replace("-{width}x{height}", "-480x270")
+        if game := Game.get_or_none(Game.id == int(stream.game_id)):
             stream.box_art_url = game.box_art_url
-        except ValueError:
+        else:
+            stream.game_name = "Streaming"
             stream.box_art_url = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
 
     streams.sort(key=lambda stream: stream.viewer_count, reverse=True)
@@ -558,7 +563,7 @@ def main():
     else:
         logger.info("Go to http://localhost:8080")
         try:
-            bt.run(host="localhost", quiet=True)
+            bt.run(server="waitress", host="localhost", port=8080, quiet=True, threads=16)
         except KeyboardInterrupt:
             pass
         finally:

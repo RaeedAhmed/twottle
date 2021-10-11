@@ -25,11 +25,11 @@
 
 % else:
 <body>
-    <ul>
-        <li><a href="/">Home</a></li>
-        <li><a href="/watching">Watching</a></li>
-        <li><a href="/settings">Settings</a></li>
-    </ul>
+    <div class="topnav">
+        <a class="hyperlink" href="/">Home</a>
+        <a class="hyperlink" href="/watching">Watching</a>
+        <a class="hyperlink" href="/settings">Settings</a>
+    </div>
     {{!base}}
 </body>
 % end

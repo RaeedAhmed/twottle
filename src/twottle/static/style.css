@@ -1,14 +1,111 @@
+/* +------------------------╔═════════════════════╗-------------------------+ */
+/* |::::::::::::::::::::::::║ Top Level Variables ║:::::::::::::::::::::::::| */
+/* +------------------------╚═════════════════════╝-------------------------+ */
+
 :root {
     font-family: Consolas, monaco, monospace;
     --font: Consolas, monaco, monospace;
     color: #f2f3f4;
     --text-color: #f2f3f4;
-    background-color: #0e0e10;
-    --bg-color: #0e0e10;
+    background-color: #1f1f23;
+    --bg-color: #1f1f23;
 }
 
 html {
     scrollbar-gutter: stable force;
     scrollbar-width: thin;
     scrollbar-color: dimgrey black;
+}
+
+
+/* +------------------------------╔═══════════╗-----------------------------+ */
+/* |::::::::::::::::::::::::::::::║ HTML Tags ║:::::::::::::::::::::::::::::| */
+/* +------------------------------╚═══════════╝-----------------------------+ */
+
+a {
+    text-decoration: none;
+    color: var(--text-color);
+}
+
+
+/* +----------------------------╔═════════════╗-----------------------------+ */
+/* |::::::::::::::::::::::::::::║ Tag Classes ║:::::::::::::::::::::::::::::| */
+/* +----------------------------╚═════════════╝-----------------------------+ */
+
+.hyperlink {
+    margin: 0px 20px 0px 0px;
+    padding: 5px 8px;
+    border: var(--text-color) solid 2px;
+}
+
+.hyperlink:hover {
+    color: var(--bg-color);
+    background-color: var(--text-color);
+}
+
+/* +-------------------------------╔════════╗-------------------------------+ */
+/* |:::::::::::::::::::::::::::::::║ Navbar ║:::::::::::::::::::::::::::::::| */
+/* +-------------------------------╚════════╝-------------------------------+ */
+
+.topnav {
+    overflow: hidden;
+}
+
+.topnav a {
+    float: left;
+    display: block;
+}
+
+/* +--------------------------------╔══════╗--------------------------------+ */
+/* |::::::::::::::::::::::::::::::::║ Misc ║::::::::::::::::::::::::::::::::| */
+/* +--------------------------------╚══════╝--------------------------------+ */
+
+.centered {
+    display: grid;
+    place-items: center;
+}
+
+.card {
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.bl {
+    bottom: 4px;
+    left: 0px;
+}
+
+.br {
+    bottom: 4px;
+    right: 0px;
+}
+
+.tr {
+    top: 0px;
+    right: 0px;
+}
+
+.bl, .br, .tr {
+    display: inline-flex;
+    position: absolute;
+    padding: 5px;
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+.br b, .tr b, .bl b {
+    padding-left: 5px;
+}
+
+.thumbnail {
+    width: 480px;
+    aspect-ratio: 16/9;
+    display: block;
+    position: relative;
+    color: inherit;
+    text-align: center;
+}
+
+.thumbnail img {
+    width: 100%;
+    height: 100%;
 }

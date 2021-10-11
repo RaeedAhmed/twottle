@@ -13,6 +13,8 @@ dependencies = [
 	"bottle",
 	"peewee",
 	"httpx",
+	"streamlink",
+	"waitress",
 ]
 
 [project.urls]
