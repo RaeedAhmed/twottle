@@ -25,13 +25,27 @@
 
 % else:
 <body>
-    <div class="topnav">
-        <a class="hyperlink" href="/">Home</a>
-        <a class="hyperlink" href="/watching">Watching</a>
-        <a class="hyperlink" href="/settings">Settings</a>
+    <div class="page_layout">
+        <div class="navbar">
+            <div class="topnav">
+                <a class="hyperlink" href="/">Home</a>
+                <a class="hyperlink" href="/watching">Watching</a>
+                <a class="hyperlink" href="/settings">Settings</a>
+            </div>
+        </div>
+        <div class="page_content">
+            {{!base}}
+        </div>
+        <div class="footer">
+            <div class="centered">
+                <a href="https://github.com/raeedahmed/twottle"><b>GitHub</b></a>
+            </div>              
+        </div>
     </div>
-    {{!base}}
 </body>
 % end
+
+
+
 
 </html>

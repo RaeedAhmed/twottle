@@ -16,13 +16,13 @@ from typing import Optional
 import bottle as bt
 import httpx
 import peewee as pw
+import waitress
 
 import twottle
 
 module_path = Path(__file__).absolute().parent  # src/twottle
 bt.TEMPLATE_PATH.insert(0, str(Path.joinpath(module_path, "views")))
 static_path = Path.joinpath(module_path, "static")
-
 
 # +--------------------------------╔═════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Logging ║:::::::::::::::::::::::::::::::| #
@@ -104,6 +104,7 @@ static_pages = [
     "watch",
 ]
 
+
 # +-------------------------------╔══════════╗-------------------------------+ #
 # |:::::::::::::::::::::::::::::::║ Database ║:::::::::::::::::::::::::::::::| #
 # +-------------------------------╚══════════╝-------------------------------+ #
@@ -138,6 +139,11 @@ class Game(BaseModel):
     id = pw.IntegerField(primary_key=True)
     name = pw.TextField()
     box_art_url = pw.TextField()
+
+
+class Favorite(BaseModel):
+    user = pw.ForeignKeyField(User, backref="favorites")
+    streamer = pw.ForeignKeyField(Streamer, backref="favorites")
 
 
 # +------------------------------╔═══════════╗-------------------------------+ #
@@ -388,7 +394,8 @@ def format_streams(streams: list[dict]) -> list[Stream]:
         stream.profile_image_url = channel.profile_image_url
         stream.uptime = time_elapsed(stream.started_at)
         stream.thumbnail_url = stream.thumbnail_url.replace("-{width}x{height}", "-480x270")
-        if game := Game.get_or_none(Game.id == int(stream.game_id)):
+        if gid := stream.game_id:
+            game = Game.get_by_id(gid)
             stream.box_art_url = game.box_art_url
         else:
             stream.game_name = "Streaming"
@@ -562,7 +569,7 @@ def main():
     else:
         logger.info("Go to http://localhost:8080")
         try:
-            bt.run(host="localhost", port=8080, quiet=True, threads=16)
+            waitress.serve(app=bt.app(), host="localhost", threads=32, _quiet=True)
         except KeyboardInterrupt:
             pass
         finally:

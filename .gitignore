@@ -16,3 +16,4 @@ build/
 cache/
 debug.log
 data.db
+pyrightconfig.json
