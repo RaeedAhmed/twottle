@@ -1,17 +1,14 @@
 import argparse
 import asyncio
 import logging
-import logging.config
 import shlex
 import shutil
-from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from configparser import ConfigParser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from subprocess import DEVNULL, Popen
-from types import SimpleNamespace
-from typing import Optional
+from typing import NamedTuple
 
 import bottle as bt
 import httpx
@@ -33,7 +30,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 # Create handlers for console and file
 c_handler = logging.StreamHandler()
-f_handler = logging.FileHandler(Path.joinpath(module_path, "debug.log"), mode="w")
+f_handler = logging.FileHandler(
+    Path.joinpath(module_path, "debug.log"), mode="w")
 c_handler.setLevel(logging.INFO)
 f_handler.setLevel(logging.DEBUG)
 # Format for console and file
@@ -130,7 +128,8 @@ class Streamer(BaseModel):
     login = pw.TextField()
     display_name = pw.TextField()
     broadcaster_type = pw.TextField(default="user")  # If not partner/affiliate
-    description = pw.TextField(default="Twitch streamer")  # Default if no description
+    # Default if no description
+    description = pw.TextField(default="Twitch streamer")
     profile_image_url = pw.TextField()
     followed = pw.BooleanField(default=False)
 
@@ -139,11 +138,6 @@ class Game(BaseModel):
     id = pw.IntegerField(primary_key=True)
     name = pw.TextField()
     box_art_url = pw.TextField()
-
-
-class Favorite(BaseModel):
-    user = pw.ForeignKeyField(User, backref="favorites")
-    streamer = pw.ForeignKeyField(Streamer, backref="favorites")
 
 
 # +------------------------------╔═══════════╗-------------------------------+ #
@@ -189,12 +183,38 @@ class Media:
 # |:::::::::::::::::::::::::::::║ Type Aliases ║:::::::::::::::::::::::::::::| #
 # +-----------------------------╚══════════════╝-----------------------------+ #
 
-Image = namedtuple("Image", "id url")
-Stream = SimpleNamespace
-UtcTime = str
-ElapsedTime = str
-JSON = dict
-Headers = JSON[str, str]
+class Image(NamedTuple):
+    id: str
+    url: str
+
+
+class Stream(NamedTuple):
+    id: str  # Stream ID
+    user_id: str
+    user_login: str
+    user_name: str  # Display Name
+    game_id: str
+    game_name: str
+    type: str  # 'live' or ''
+    title: str
+    viewer_count: str
+    thumbnail_url: str  # -480x270
+    profile_image_url: str  # from user_id
+    uptime: str  # time_elapsed(started_at)
+    box_art_url: str  # from game_id
+
+
+class Vod(NamedTuple):
+    id: str
+    user_id: str
+    user_login: str
+    user_name: str
+    title: str
+    description: str
+    url: str
+    thumbnail_url: str
+    view_count: str
+    duration: str
 
 
 # +-----------------------------╔══════════════╗-----------------------------+ #
@@ -215,7 +235,7 @@ class Helix:
     )
 
     @staticmethod
-    def headers() -> Headers:
+    def headers():
         return {
             "Client-ID": Helix.client_id,
             "Authorization": f"Bearer {User.get().access_token}",
@@ -233,12 +253,17 @@ class Request:
             transport=transport,
         )
 
-    def get(self) -> list[dict]:
+    def data(self) -> list[dict]:
         with self.session as session:
             data: list[dict] = session.get("").json()["data"]
         return data
 
-    def get_iter(self):
+    def get(self) -> dict:
+        with self.session as session:
+            data: dict = session.get("").json()
+        return data
+
+    def get_iter(self) -> list[dict]:
         results = []
         with self.session as session:
             while True:
@@ -267,21 +292,25 @@ class AsyncRequest:
     #         pass
 
     async def get_batch(self, id_key="id") -> list[dict]:
-        id_lists = [self.ids[x : x + 100] for x in range(0, len(self.ids), 100)]
+        id_lists = [self.ids[x: x + 100] for x in range(0, len(self.ids), 100)]
         async with self.session:
             resps = await asyncio.gather(
                 *(
-                    self.session.get("?" + "&".join([f"{id_key}={i}" for i in idlist]))
+                    self.session.get(
+                        "?" + "&".join([f"{id_key}={i}" for i in idlist]))
                     for idlist in id_lists
                 )
             )
         data = []
-        [data.extend(datum) for resp in resps if (datum := resp.json()["data"])]
+        [data.extend(datum)
+         for resp in resps if (datum := resp.json()["data"])]
         return data
 
 
-def cache(ids: set[int], model: BaseModel) -> None:
-    endpoint, cachedir = ("/users", user_cache) if model is Streamer else ("/games", games_cache)
+def cache(ids: set[int], model: Game | Streamer) -> None:
+    endpoint, cachedir = (
+        ("/users", user_cache) if model is Streamer else ("/games", games_cache)
+    )
     image_tag = "profile_image_url" if model is Streamer else "box_art_url"
     tmp = {i for i in ids if model.get_or_none(model.id == i) is None}
     if not tmp:
@@ -293,11 +322,13 @@ def cache(ids: set[int], model: BaseModel) -> None:
                 if not datum[key]:
                     datum.pop(key)
         else:
-            datum["box_art_url"] = datum["box_art_url"].replace("-{width}x{height}", "-285x380")
+            datum["box_art_url"] = datum["box_art_url"].replace(
+                "-{width}x{height}", "-285x380"
+            )
     images = [Image(datum["id"], datum[image_tag]) for datum in data]
 
     def download_image(image: Image) -> None:
-        data = httpx.get(image.url).content
+        data = httpx.get(image.url, follow_redirects=True).content
         imgpath = Path.joinpath(cachedir, f"{image.id}.jpg")
         with open(imgpath, "wb") as f:
             f.write(data)
@@ -312,9 +343,11 @@ def cache(ids: set[int], model: BaseModel) -> None:
 
 
 def get_user(access_token: str) -> None:
-    headers = {"Client-ID": Helix.client_id, "Authorization": f"Bearer {access_token}"}
+    headers = {"Client-ID": Helix.client_id,
+               "Authorization": f"Bearer {access_token}"}
     endpoint = f"{Helix.base}/users"
-    user: dict = httpx.get(endpoint, headers=headers, timeout=None).json()["data"][0]
+    user: dict = httpx.get(endpoint, headers=headers,
+                           timeout=None).json()["data"][0]
     logger.info(f"User {user['display_name']}")
     user["access_token"] = access_token
     User.create_table()
@@ -333,7 +366,7 @@ def check_user() -> None:
         bt.redirect("/login")
 
 
-def check_cache():
+def check_cache() -> None:
     logger.debug("Checking cache")
     if (Streamer.table_exists() or Game.table_exists()) is False:
         logger.debug("No cache found")
@@ -341,8 +374,7 @@ def check_cache():
         follows = get_follows()
         logger.debug(f"Following {len(follows)} channels")
         cache(follows, Streamer)
-        Streamer.update(followed=True).execute()
-
+        db.execute(Streamer.update(followed=True))
 
 # +------------------------------╔════════════╗------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Fetch Data ║::::::::::::::::::::::::::::::| #
@@ -365,17 +397,20 @@ def update_follows() -> None:
         if (sid in follows and streamer.followed is not True) or (
             sid not in follows and streamer.followed is True
         ):
-            logger.info(f"{'un'*streamer.followed}following {streamer.display_name}")
-            Streamer.update(followed=not streamer.followed).where(
+            logger.info(
+                f"{'un'*streamer.followed}following {streamer.display_name}")
+            db.execute(Streamer.update(followed=not streamer.followed).where(
                 Streamer.id == streamer.id
-            ).execute()
+            ))
 
 
 def get_followed_streams() -> list[dict]:
     follows = {
-        streamer.id for streamer in Streamer.select().where(Streamer.followed == True).execute()
+        streamer.id
+        for streamer in Streamer.select().where(Streamer.followed == True).execute()
     }
-    streams = asyncio.run(AsyncRequest("/streams", follows).get_batch(id_key="user_id"))
+    streams = asyncio.run(AsyncRequest(
+        "/streams", follows).get_batch(id_key="user_id"))
     logger.debug(f"Example stream payload: {streams[0]}")
     return streams
 
@@ -383,26 +418,30 @@ def get_followed_streams() -> list[dict]:
 def format_streams(streams: list[dict]) -> list[Stream]:
     with ThreadPoolExecutor() as tp:
         futures = []
-        for args in (("game_id", Game), ("user_id", Streamer)):
-            ids = {int(i) for stream in streams if (i := stream[args[0]])}
-            futures.append(tp.submit(cache(ids, args[1])))
+        for type_id, model in {"game_id": Game, "user_id": Streamer}.items():
+            ids = {int(i) for stream in streams if (i := stream[type_id])}
+            futures.append(tp.submit(cache(ids, model)))
         for future in as_completed(futures):
             future.done()
-    streams = [SimpleNamespace(**stream) for stream in streams]
     for stream in streams:
-        channel = Streamer.get_by_id(stream.user_id)
-        stream.profile_image_url = channel.profile_image_url
-        stream.uptime = time_elapsed(stream.started_at)
-        stream.thumbnail_url = stream.thumbnail_url.replace("-{width}x{height}", "-480x270")
-        if gid := stream.game_id:
+        channel = Streamer.get_by_id(stream["user_id"])
+        stream["profile_image_url"] = channel.profile_image_url
+        stream["uptime"] = time_elapsed(stream["started_at"])
+        stream["thumbnail_url"] = stream["thumbnail_url"].replace(
+            "-{width}x{height}", "-480x270"
+        )
+        if gid := stream["game_id"]:
             game = Game.get_by_id(gid)
-            stream.box_art_url = game.box_art_url
+            stream["box_art_url"] = game.box_art_url
         else:
-            stream.game_name = "Streaming"
-            stream.box_art_url = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
-
-    streams.sort(key=lambda stream: stream.viewer_count, reverse=True)
-    return streams
+            stream["game_name"] = "Streaming"
+            stream["box_art_url"] = (
+                "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
+            )
+    streams_fmt: list[Stream] = [Stream(
+        **{k: v for k, v in stream.items() if k in Stream._fields}) for stream in streams]
+    streams_fmt.sort(key=lambda stream: stream.viewer_count, reverse=True)
+    return streams_fmt
 
 
 # +------------------------------╔═════════════╗-----------------------------+ #
@@ -446,7 +485,7 @@ def login():
 
 @bt.route("/authenticate")
 def authenticate():
-    access_token: Optional[str]
+    access_token: str | None
     if access_token := bt.request.query.get("access_token"):
         get_user(access_token)
         bt.redirect("/")
@@ -500,8 +539,29 @@ def send_image(filename):
 
 
 @bt.route("/c/<channel>")
-def channel():
-    pass
+@bt.route("/c/<channel>/<mode>")
+def channel(channel, mode="default", data=None, stream=None):
+    streamer = Streamer.get_or_none(Streamer.login == channel)
+    if not streamer:
+        data = Request("/users", {"login": f"{channel}"}).data()
+        if data:
+            cid = data[0]["id"]
+            cache({cid}, Streamer)
+            streamer = Streamer.get_by_id(cid)
+        else:
+            msg = f"User '{channel}' not found"
+            return bt.template("error.tpl", message=msg)
+    match mode:
+        case "vods":
+            params = {"user_id": streamer.id}
+        case "clips":
+            pass
+        case "emotes":
+            pass
+        case "default":
+            if stream_data := Request("/streams", {"user_id": streamer.id}).data():
+                stream = format_streams([stream_data[0]])[0]
+    return bt.template("channel.tpl", channel=streamer, stream=stream)
 
 
 # +------------------------------╔═══════════╗-------------------------------+ #
@@ -509,8 +569,10 @@ def channel():
 # +------------------------------╚═══════════╝-------------------------------+ #
 
 
-def time_elapsed(start: UtcTime, d="") -> ElapsedTime:
-    start = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+def time_elapsed(begin: str, d="") -> str:
+    """start: UTC time"""
+    start = datetime.strptime(
+        begin, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     current = datetime.now(tz=timezone.utc)
     elapsed = round((current - start).total_seconds())
     delta = str(timedelta(seconds=elapsed))
@@ -530,6 +592,20 @@ def watch_video(info: bt.FormsDict):
     Media(command, info)
 
 
+def process_vods(vods: list[dict]) -> list[Vod]:
+    for vod in vods:
+        vod["thumbnail_url"] = vod["thumbnail_url"].replace(
+            "%{width}x%{height}", "480x270"
+        )
+        if not vod["thumbnail_url"]:
+            vod[
+                "thumbnail_url"
+            ] = "https://vod-secure.twitch.tv/_404/404_processing_320x180.png"
+        vod["created_at"] = time_elapsed(vod["created_at"])
+    vods_fmt: list[Vod] = [
+        Vod(**{k: v for k, v in vod.items() if k in Vod._fields}) for vod in vods]
+    return vods_fmt
+
 # +------------------------╔════════════════════════╗------------------------+ #
 # |::::::::::::::::::::::::║ Command Line Interface ║::::::::::::::::::::::::| #
 # +------------------------╚════════════════════════╝------------------------+ #
@@ -540,7 +616,11 @@ def cli() -> argparse.ArgumentParser:
         description="Web GUI for streamlink cli with Twitch account integration"
     )
     actions = parser.add_mutually_exclusive_group()
-    actions.add_argument("--reset", action="store_true", help="reset config file")
+    actions.add_argument("--reset", action="store_true",
+                         help="reset config file")
+    actions.add_argument(
+        "--logout", action="store_true", help="remove user from app, prompt login again"
+    )
     actions.add_argument(
         "-c", "--clear-data", action="store_true", help="remove all user data and cache"
     )
@@ -560,16 +640,19 @@ def main():
     parser = cli()
     args = parser.parse_args()
     if args.reset:
-        Config.reset()
+        config.reset()
     elif args.clear_data:
         db.drop_tables([User, Streamer, Game])
         shutil.rmtree(cache_path)
+    elif args.logout:
+        db.drop_tables([User])
     elif args.dump_cache:
         db.drop_tables([Streamer, Game])
     else:
         logger.info("Go to http://localhost:8080")
         try:
-            waitress.serve(app=bt.app(), host="localhost", threads=32, _quiet=True)
+            waitress.serve(app=bt.app(), host="localhost",
+                           threads=32, _quiet=True)
         except KeyboardInterrupt:
             pass
         finally:
