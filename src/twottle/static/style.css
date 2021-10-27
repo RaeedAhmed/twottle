@@ -9,6 +9,7 @@
     --text-color: #f2f3f4;
     background-color: #1f1f23;
     --bg-color: #1f1f23;
+    --card-width: 420px
 }
 
 
@@ -99,22 +100,20 @@ a {
 
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-width), 1fr));
     justify-content: space-evenly;
-    gap: 1rem 1rem;
+    gap: 3rem 1rem;
 }
 
 .card {
   padding: 10px;
   display: grid;
-  width: 500px;
+  width: var(--card-width);
   background-color: #18181b;
   box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
-  grid-template-columns: 500px;
-  grid-template-rows: repeat(min-content);
-  grid-auto-columns: 500px;
-  gap: 5px 5px;
+  grid-template-columns: var(--card-width);
   grid-auto-flow: row;
+  gap: 5px;
   grid-template-areas:
     "card-top"
     "card-mid"
@@ -216,7 +215,7 @@ a {
 }
 
 .thumbnail {
-    width: 480px;
+    width: var(--card-width);
     aspect-ratio: 16/9;
     display: block;
     position: relative;
