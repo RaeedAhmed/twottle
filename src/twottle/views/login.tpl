@@ -1,4 +1,0 @@
-% rebase('base.tpl', title="Login")
-<div class="centered">
-    <h2>No user found. <a href="{{oauth}}" class="hyperlink" style="--text-color:#9146ff;">Login</a></h2>
-</div>
