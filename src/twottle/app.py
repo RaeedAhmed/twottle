@@ -6,6 +6,7 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from configparser import ConfigParser
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from subprocess import DEVNULL, Popen
 from typing import NamedTuple
@@ -218,10 +219,14 @@ class Vod(NamedTuple):
     duration: str
 
 
+class SearchResult(NamedTuple):
+    model: str
+    results: list[pw.ModelSelect]
+
+
 # +-----------------------------╔══════════════╗-----------------------------+ #
 # |:::::::::::::::::::::::::::::║ API Requests ║:::::::::::::::::::::::::::::| #
 # +-----------------------------╚══════════════╝-----------------------------+ #
-
 
 class Helix:
     client_id = "o232r2a1vuu2yfki7j3208tvnx8uzq"
@@ -337,7 +342,7 @@ def cache(ids: set[int], model: Game | Streamer) -> None:
 
     logger.debug(f"Caching {len(data)} {endpoint[1:]}")
     for datum in data:
-        datum[image_tag] = f"cache{endpoint}/{datum['id']}.jpg"
+        datum[image_tag] = f"/cache{endpoint}/{datum['id']}.jpg"
         model.create(**datum)
 
 
@@ -372,7 +377,7 @@ def check_cache() -> None:
         db.create_tables([Streamer, Game], safe=True)
         follows = get_follows()
         logger.debug(f"Following {len(follows)} channels")
-        cache(follows, Streamer)  # type: ignore
+        cache(follows, Streamer)
         db.execute(Streamer.update(followed=True))
 
 # +------------------------------╔════════════╗------------------------------+ #
@@ -389,7 +394,7 @@ def get_follows() -> set[int]:
 
 def update_follows() -> None:
     follows = get_follows()
-    cache(follows, Streamer)  # type: ignore
+    cache(follows, Streamer)
     streamers: list[Streamer] = [streamer for streamer in Streamer.select()]
     for streamer in streamers:
         sid = streamer.id
@@ -406,7 +411,7 @@ def update_follows() -> None:
 def get_followed_streams() -> list[dict]:
     follows = {
         streamer.id
-        for streamer in Streamer.select().where(Streamer.followed == True).execute()  # type: ignore
+        for streamer in Streamer.select().where(Streamer.followed == True).execute()
     }
     streams = asyncio.run(AsyncRequest(
         "/streams", follows).get_batch(id_key="user_id"))
@@ -419,7 +424,7 @@ def format_streams(streams: list[dict]) -> list[Stream]:
         futures = []
         for type_id, model in {"game_id": Game, "user_id": Streamer}.items():
             ids = {int(i) for stream in streams if (i := stream[type_id])}
-            futures.append(tp.submit(cache(ids, model)))  # type: ignore
+            futures.append(tp.submit(cache(ids, model)))
         for future in as_completed(futures):
             future.done()
     for stream in streams:
@@ -485,7 +490,7 @@ def login():
 @bt.route("/authenticate")
 def authenticate():
     access_token: str | None
-    if access_token := bt.request.query.get("access_token"):  # type: ignore
+    if access_token := bt.request.query.get("access_token"):
         get_user(access_token)
         bt.redirect("/")
     return bt.template("base.html", verification=True)
@@ -495,11 +500,11 @@ def authenticate():
 def settings():
     changes = []
     if bt.request.method == "POST":
-        if bt.request.forms.get("reset"):  # type: ignore
+        if bt.request.forms.get("reset"):
             config.reset()
             changes = ["settings reset"]
         else:
-            changes = config.apply(bt.request.forms)  # type: ignore
+            changes = config.apply(bt.request.forms)
     return bt.template("settings.html", user=config["USER"], changes=changes)
 
 
@@ -511,20 +516,46 @@ def watch():
     url:    twitch.tv/user_login, twitch.tv/videos/vod_id, ...
     misc:   thumbnail, etc.
     """
-    watch_video(bt.request.query)  # type: ignore
+    watch_video(bt.request.query)
     return """<script>setTimeout(function () { window.history.back() });</script>"""
 
 
 @bt.route("/watching", method=["GET", "POST"])
 def watching():
     if bt.request.method == "POST":
-        if pid := bt.request.forms.get("pid"):  # type: ignore
+        if pid := bt.request.forms.get("pid"):
             Media.kill(int(pid))
-        if bt.request.forms.get("wipe"):  # type: ignore
+        if bt.request.forms.get("wipe"):
             Media.wipe()
         return bt.redirect("/watching")
     Media.update()
     return bt.template("watching.html", procs=Media.procs)
+
+
+@bt.route("/search")
+def search():
+
+    def search_results(query: str, endpoint: str):
+        model = Game if "categories" in endpoint else Streamer
+        resp = Request(
+            endpoint, {"query": query, "first": 5}).json()
+        if results := resp.get("data"):
+            ids = {int(result["id"]) for result in results}
+            cache(ids, model)
+            return SearchResult(endpoint, model.select().where(model.id.in_(ids)))
+        else:
+            return None
+
+    query = bt.request.query.get("query")
+    if query:
+        req = partial(search_results, query)
+
+        with ThreadPoolExecutor() as tp:
+            results = list(
+                tp.map(req, ["/search/channels", "/search/categories"]))
+    else:
+        results = []
+    return bt.template("search.html", query=query, results=results)
 
 
 @bt.route("/static/<filename:path>")
@@ -537,27 +568,27 @@ def send_image(filename):
     return bt.static_file(filename, root=str(cache_path), mimetype="image/jpeg")
 
 
-@bt.route("/c/<channel>")
-@bt.route("/c/<channel>/<mode>")
+@bt.route("/u/<channel>")
+@bt.route("/u/<channel>/<mode>")
 def channel(channel, mode="default", data=None, stream=None):
     streamer = Streamer.get_or_none(Streamer.login == channel)
     if not streamer:
         data = Request("/users", {"login": f"{channel}"}).json().get("data")
         if data:
-            cid = data[0]["id"]
-            cache({cid}, Streamer)  # type: ignore
-            streamer = Streamer.get_by_id(cid)
+            uid = data[0]["id"]
+            cache({uid}, Streamer)
+            streamer = Streamer.get_by_id(uid)
         else:
             msg = f"User '{channel}' not found"
             return bt.template("error.html", message=msg)
     match mode:
         case "vods":
-            vod_type = bt.request.query.get(  # type: ignore
-                "vod_type") or "archive"  # type: ignore
-            params = {"user_id": streamer.id, "first": 20, "type": vod_type}
-            if before := bt.request.query.get("before"):  # type: ignore
+            vod_type = bt.request.query.get(
+                "vod_type") or "archive"
+            params = {"user_id": streamer.id, "type": vod_type}
+            if before := bt.request.query.get("before"):
                 params["before"] = before
-            elif after := bt.request.query.get("after"):  # type: ignore
+            elif after := bt.request.query.get("after"):
                 params["after"] = after
             resp = Request("/videos", params).json()
             if not resp.get("data"):
@@ -574,6 +605,41 @@ def channel(channel, mode="default", data=None, stream=None):
                 stream = format_streams([stream_data[0]])[0]
             return bt.template("channel.html", channel=streamer, stream=stream)
 
+
+@bt.route("/c")
+@bt.route("/c/<category_id>")
+def category(category_id=None):
+    if not category_id:
+        resp = Request("/games/top", {"first": 100}).json().get("data")
+        ids = {int(game["id"]) for game in resp}
+        cache(ids, Game)
+        games = [Game.get_by_id(int(game["id"])) for game in resp]
+        return bt.template("games.html", games=games)
+    if category_id == "all":
+        params = {"first": 24}
+        game = None
+    else:
+        game = Game.get_or_none(Game.id == category_id)
+        if not game:
+            data = Request("/games", {"id": category_id}).json().get("data")
+            if data:
+                gid = data[0]["id"]
+                cache({gid}, Game)
+                game = Game.get_by_id(gid)
+            else:
+                msg = f"Game not found"
+                return bt.template("error.html", message=msg)
+        params = {"game_id": game.id, "first": 24}
+    if before := bt.request.query.get("before"):
+        params["before"] = before
+    elif after := bt.request.query.get("after"):
+        params["after"] = after
+    resp = Request("/streams", params).json()
+    if not resp.get("data"):
+        return """<script>setTimeout(function () { window.history.back() });</script>"""
+    streams = format_streams(resp["data"])
+    pagination = resp["pagination"]["cursor"]
+    return bt.template("streams.html", game=game, streams=streams, pagination=pagination)
 
 # +------------------------------╔═══════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Utilities ║:::::::::::::::::::::::::::::::| #
