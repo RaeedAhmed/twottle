@@ -2,18 +2,19 @@
 
 <form action="/settings" method="POST">
     % for setting, value in sorted(list(user.items())):
-    <div>
+    <div class="settings">
         <label for="{{setting}}">{{setting}}</label>
-        <input value="{{value}}" name="{{setting}}" id="{{setting}}">
+        <input class="setting" value="{{value}}" name="{{setting}}" id="{{setting}}">
     </div>
     % end
+    <br>
     <div>
-        <button>Apply Settings</button>
+        <button class="settings">Apply Settings</button>
     </div>
 </form>
-
+<br>
 <form action="/settings" method="POST">
-    <input name="reset" id="reset" type="submit" value="Restore Defaults">
+    <button name="reset" class="settings">Restore Defaults</button>
 </form>
 
 % for change in changes:
