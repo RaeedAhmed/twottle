@@ -1,67 +1,85 @@
 % rebase('base.html', title=f"{channel.display_name}")
-<h2>{{channel.display_name}}</h2>
-<img src="/{{channel.profile_image_url}}" alt="">
+<div style="display: grid; grid-template-columns: 100px 1fr; gap: 10px;">
+    <div>
+        <img src="{{channel.profile_image_url}}" width="100%">
+    </div>
+    <div style="display: grid; grid-template-rows: 50px 50px;">
+        <div>
+            <span class="channel_name"><b>{{channel.display_name}}</b> - {{channel.broadcaster_type}}</span>
+        </div>
+        <div>
+            <p>{{channel.description}}</p>
+        </div>
+    </div>
+</div>
 % if defined('stream') and stream:
 <div class="card">
     <div class="card-mid">
-          <div class="thumbnail">
-              <a href="/watch?type=streaming&name={{stream.user_name}}&url=twitch.tv/{{stream.user_login}}"><img src="{{stream.thumbnail_url}}"></a>
-              <div class="bl">
-                  <i class="gg-time"></i>
-                  <b>{{stream.uptime}}</b>
-              </div>
-              <div class="br">
-                  <i class="gg-user" style="color: #ff496c;"></i>
-                  <b>{{stream.viewer_count}}</b>   
-              </div>
-              <div class="c" style="--ggs: 5">
-                  <i class="gg-play-button"></i>
-              </div>
-          </div>
+        <div class="thumbnail">
+            <a href="/watch?type=streaming&name={{stream.user_name}}&url=twitch.tv/{{stream.user_login}}"><img
+                    src="{{stream.thumbnail_url}}"></a>
+            <div class="bl">
+                <i class="gg-time"></i>
+                <b>{{stream.uptime}}</b>
+            </div>
+            <div class="br">
+                <i class="gg-user" style="color: #ff496c;"></i>
+                <b>{{stream.viewer_count}}</b>
+            </div>
+            <div class="c" style="--ggs: 5">
+                <i class="gg-play-button"></i>
+            </div>
+        </div>
     </div>
     <div class="card-bottom">
-      <div class="box_art"><img src="/{{stream.box_art_url}}" width="75"></div>
-      <div class="text_info">
-        <div class="vid_title long" title="{{stream.title}}" style="font-size: small;">{{stream.title}}</div>
-        <div class="game_name long"><b>{{stream.game_name}}</b></div>
-      </div>
+        <div class="box_art"><a href="/c/{{stream.game_id}}"><img src="{{stream.box_art_url}}" width="75"></a></div>
+        <div class="text_info">
+            <div class="vid_title long" title="{{stream.title}}" style="font-size: small;">{{stream.title}}</div>
+            <div class="game_name long"><b>{{stream.game_name}}</b></div>
+        </div>
     </div>
-  </div>
+</div>
 % end
 <br>
-<a href="/c/{{channel.login}}/vods?vod_type=archive"><button class="button" style="--text-color: rgb(163, 7, 224);"><b>Vods</b></button></a>
-<a href="/c/{{channel.login}}/vods?vod_type=highlight"><button class="button" style="--text-color: rgb(163, 7, 224);"><b>Highlights</b></button></a>
+<a href="/u/{{channel.login}}/vods?vod_type=archive"><button class="button"
+        style="--text-color: rgb(163, 7, 224);"><b>Vods</b></button></a>
+<a href="/u/{{channel.login}}/vods?vod_type=highlight"><button class="button"
+        style="--text-color: rgb(163, 7, 224);"><b>Highlights</b></button></a>
 <br>
 % if defined('vods'):
 <div class="card-grid">
-% for vod in vods:
-  <div class="card">
-    <p title="{{vod.title}}" style="text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">{{vod.title}}</p>
-    <div class="card-mid">
-      <div class="thumbnail">
-        <a href="/watch?type=vod&name={{vod.user_name}}&url={{vod.url}}"><img src="{{vod.thumbnail_url}}" alt=""/></a> 
-        <div class="tr">
-          <i class="gg-calendar-dates"></i>
-          <b>{{vod.created_at}}</b> 
+    % for vod in vods:
+    <div class="card">
+        <p title="{{vod.title}}" style="text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">{{vod.title}}
+        </p>
+        <div class="card-mid">
+            <div class="thumbnail">
+                <a href="/watch?type=vod&name={{vod.user_name}}&url={{vod.url}}"><img src="{{vod.thumbnail_url}}"
+                        alt="" /></a>
+                <div class="tr">
+                    <i class="gg-calendar-dates"></i>
+                    <b>{{vod.created_at}}</b>
+                </div>
+                <div class="bl">
+                    <i class="gg-time"></i>
+                    <b>{{vod.duration}}</b>
+                </div>
+                <div class="br">
+                    <i class="gg-eye"></i>
+                    <b>{{vod.view_count}}</b>
+                </div>
+                <div class="c" style="--ggs: 5">
+                    <i class="gg-play-button"></i>
+                </div>
+            </div>
         </div>
-        <div class="bl">
-          <i class="gg-time"></i>
-          <b>{{vod.duration}}</b>
-        </div>
-        <div class="br">
-          <i class="gg-eye"></i>
-          <b>{{vod.view_count}}</b>
-        </div>
-        <div class="c" style="--ggs: 5">
-          <i class="gg-play-button"></i>
-        </div>
-      </div>
     </div>
-  </div>
-% end
+    % end
 </div>
 <br>
-<a href="/c/{{channel.login}}/vods?vod_type={{vod_type}}&before={{pagination}}"><button class="button"><b>Previous</b></button></a>
-<a href="/c/{{channel.login}}/vods?vod_type={{vod_type}}&after={{pagination}}"><button class="button"><b>After</b></button></a>
+<a href="/u/{{channel.login}}/vods?vod_type={{vod_type}}&before={{pagination}}"><button
+        class="button"><b>Previous</b></button></a>
+<a href="/u/{{channel.login}}/vods?vod_type={{vod_type}}&after={{pagination}}"><button
+        class="button"><b>Next</b></button></a>
 % end
-<!-- <a href="/c/{{channel.login}}/clips"><button class="button" style="--text-color: rgb(163, 7, 224);"><b>Clips</b></button></a> -->
+<!-- <a href="/u/{{channel.login}}/clips"><button class="button" style="--text-color: rgb(163, 7, 224);"><b>Clips</b></button></a> -->
