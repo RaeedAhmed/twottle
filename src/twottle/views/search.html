@@ -1,0 +1,17 @@
+% rebase('base.html', title=f"Search Results")
+<h1>Search Results for '{{query}}'</h1>
+% for type in results:
+    % if type and "channel" in type.model:
+        <h2>Channels:</h2>
+        % for result in type.results:
+        <p><a href="/u/{{result.login}}"><img src="{{result.profile_image_url}}" width=50></a> {{result.display_name}} - {{result.broadcaster_type}}</p>
+        <p>{{result.description}}</p>
+        % end
+    % end
+    % if type and "categories" in type.model:
+        <h2>Categories:</h2>
+        % for result in type.results:
+        <p><a href="/c/{{result.id}}"><img src="{{result.box_art_url}}" width=50></a> {{result.name}}</p>
+        % end
+    % end
+% end
