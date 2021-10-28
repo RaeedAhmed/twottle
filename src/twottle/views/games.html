@@ -1,0 +1,15 @@
+% rebase('base.html', title="Top Games")
+<h1>Top Games</h1>
+
+<div class="card-grid">
+    %for game in games:
+    <div class="card">
+        <div class="card-bottom" style="grid-template-columns: 100px minmax(0, 1fr);">
+            <div class="box_art"><a href="/c/{{game.id}}"><img src="{{game.box_art_url}}" width="100"></a></div>
+            <div class="text_info">
+                <div class="game_name long"><b>{{game.name}}</b></div>
+            </div>
+        </div>
+    </div>
+    %end
+</div>
