@@ -395,9 +395,10 @@ def format_streams(streams: list[dict]) -> list[Stream]:
             "-{width}x{height}", "-480x270"
         )
         if gid := stream["game_id"]:
-            game = Game.get_by_id(gid)
-            stream["box_art_url"] = game.box_art_url
-        else:
+            game = Game.get_or_none(Game.id == gid)
+            if game:
+                stream["box_art_url"] = game.box_art_url
+        if not gid or not game:
             stream["game_name"] = "Streaming"
             stream["box_art_url"] = (
                 "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
