@@ -1,9 +1,9 @@
 % rebase('base.html', title="Currently Watching")
 % for proc in procs:
 <form action="/watching" method="POST">
+    <button class="button" style="--text-color: red; padding: 5px 10px;"><b>X</b></button>
     <label for="pid">{{proc.info.name}} {{proc.info.type}} {{proc.info.url}}</label>
     <input name="pid" value="{{proc.info.pid}}" type="hidden">
-    <button class="button" style="--text-color: red; padding: 5px 10px;"><b>X</b></button>
 </form>
 
 % end
