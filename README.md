@@ -12,7 +12,8 @@ A web gui for browsing twitch.tv streams and videos on demand. Search for catego
 - Clone repository and run `flit install` in root directory
 
 ## Dependencies
-- `python >3.8` and pip packages
+3.10 requirements are some simple typing changes to the language. On request I can relax the version requirement.
+- `python >3.10` and pip packages
     - `bottle`
     - `httpx`
     - `peewee`
