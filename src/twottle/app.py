@@ -594,6 +594,14 @@ def category(category_id=None):
     return bt.template("streams.html", game=game, streams=streams, pagination=pagination)
 
 
+@bt.error(400)
+@bt.error(403)
+@bt.error(404)
+@bt.error(500)
+def error_page(error):
+    return bt.template("error.html", message=error)
+
+
 # +------------------------------╔═══════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Utilities ║:::::::::::::::::::::::::::::::| #
 # +------------------------------╚═══════════╝-------------------------------+ #
