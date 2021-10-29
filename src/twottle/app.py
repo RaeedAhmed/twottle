@@ -18,9 +18,11 @@ import waitress
 
 import twottle
 
+# Configuring file paths for referencing
 module_path = Path(__file__).absolute().parent  # src/twottle
 bt.TEMPLATE_PATH.insert(0, str(Path.joinpath(module_path, "views")))
 static_path = Path.joinpath(module_path, "static")
+
 
 # +--------------------------------╔═════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Logging ║:::::::::::::::::::::::::::::::| #
@@ -38,7 +40,7 @@ f_handler.setLevel(logging.DEBUG)
 # Format for console and file
 c_format = logging.Formatter("\n%(message)s")
 f_format = logging.Formatter(
-    fmt="\n%(asctime)s\n%(lineno)d: %(funcName)s\n%(message)s",
+    fmt="\n%(asctime)s\nLine %(lineno)d: %(funcName)s()\n%(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
 )
 c_handler.setFormatter(c_format)
@@ -51,7 +53,6 @@ logger.addHandler(f_handler)
 # +--------------------------------╔════════╗--------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Config ║::::::::::::::::::::::::::::::::| #
 # +--------------------------------╚════════╝--------------------------------+ #
-
 
 class Config(ConfigParser):
     path = Path.joinpath(module_path, "config.ini")
@@ -92,6 +93,7 @@ games_cache = Path.joinpath(module_path, "cache/games")
 user_cache.mkdir(exist_ok=True, parents=True)
 games_cache.mkdir(exist_ok=True, parents=True)
 
+# routes that don't need to check for user/cache
 static_pages = [
     "authenticate",
     "config",
@@ -101,6 +103,7 @@ static_pages = [
     "login",
     "cache/",
     "watch",
+    "favicon"
 ]
 
 
@@ -129,8 +132,7 @@ class Streamer(BaseModel):
     login = pw.TextField()
     display_name = pw.TextField()
     broadcaster_type = pw.TextField(default="user")  # If not partner/affiliate
-    # Default if no description
-    description = pw.TextField(default="Twitch streamer")
+    description = pw.TextField(default="Twitch streamer")  # Empty description
     profile_image_url = pw.TextField()
     followed = pw.BooleanField(default=False)
 
@@ -145,7 +147,6 @@ class Game(BaseModel):
 # |::::::::::::::::::::::::::::::║ Processes ║:::::::::::::::::::::::::::::::| #
 # +------------------------------╚═══════════╝-------------------------------+ #
 
-
 class Media:
     procs: list = []
 
@@ -153,7 +154,7 @@ class Media:
         self.runtime = Popen(command, stdout=DEVNULL)
         info.append("pid", self.runtime.pid)
         self.info = info
-        logger.debug(f"proc command: {command}\nproc info: {info}")
+        logger.debug(f"proc command: {command}\nproc info: {dict(info)}")
         Media.procs.append(self)
 
     @classmethod
@@ -180,9 +181,9 @@ class Media:
                 cls.procs.remove(proc)
 
 
-# +-----------------------------╔══════════════╗-----------------------------+ #
-# |:::::::::::::::::::::::::::::║ Type Aliases ║:::::::::::::::::::::::::::::| #
-# +-----------------------------╚══════════════╝-----------------------------+ #
+# +----------------------------╔═════════════════╗---------------------------+ #
+# |::::::::::::::::::::::::::::║ Data Containers ║:::::::::::::::::::::::::::| #
+# +----------------------------╚═════════════════╝---------------------------+ #
 
 class Image(NamedTuple):
     id: str
@@ -291,10 +292,6 @@ class AsyncRequest:
         )
         self.ids = list(ids)
 
-    # async def get(self):
-    #     async with self.session as session:
-    #         pass
-
     async def get_batch(self, id_key="id") -> list[dict]:
         id_lists = [self.ids[x: x + 100] for x in range(0, len(self.ids), 100)]
         async with self.session:
@@ -311,57 +308,9 @@ class AsyncRequest:
         return data
 
 
-def cache(ids: set[int], model: Game | Streamer) -> None:
-    endpoint, cachedir = (
-        ("/users", user_cache) if model is Streamer else ("/games", games_cache)
-    )
-    image_tag = "profile_image_url" if model is Streamer else "box_art_url"
-    tmp = {i for i in ids if model.get_or_none(model.id == i) is None}
-    if not tmp:
-        return None
-    data = asyncio.run(AsyncRequest(endpoint, tmp).get_batch())
-    for datum in data:
-        if model is Streamer:
-            for key in ["broadcaster_type", "description", "offline_image_url"]:
-                if not datum[key]:
-                    datum.pop(key)
-        else:
-            datum["box_art_url"] = datum["box_art_url"].replace(
-                "-{width}x{height}", "-285x380"
-            )
-    images = [Image(datum["id"], datum[image_tag]) for datum in data]
-
-    def download_image(image: Image) -> None:
-        data = httpx.get(image.url, follow_redirects=True).content
-        imgpath = Path.joinpath(cachedir, f"{image.id}.jpg")
-        with open(imgpath, "wb") as f:
-            f.write(data)
-
-    with ThreadPoolExecutor() as tp:
-        tp.map(download_image, images)
-
-    logger.debug(f"Caching {len(data)} {endpoint[1:]}")
-    for datum in data:
-        datum[image_tag] = f"/cache{endpoint}/{datum['id']}.jpg"
-        model.create(**datum)
-
-
-def get_user(access_token: str) -> None:
-    headers = {"Client-ID": Helix.client_id,
-               "Authorization": f"Bearer {access_token}"}
-    endpoint = f"{Helix.base}/users"
-    user: dict = httpx.get(endpoint, headers=headers,
-                           timeout=None).json()["data"][0]
-    logger.info(f"User {user['display_name']}")
-    user["access_token"] = access_token
-    User.create_table()
-    User.create(**user)
-
-
 # +--------------------------------╔═══════╗---------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Tests ║:::::::::::::::::::::::::::::::::| #
 # +--------------------------------╚═══════╝---------------------------------+ #
-
 
 def check_user() -> None:
     logger.debug("Checking user")
@@ -380,9 +329,21 @@ def check_cache() -> None:
         cache(follows, Streamer)
         db.execute(Streamer.update(followed=True))
 
+
 # +------------------------------╔════════════╗------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Fetch Data ║::::::::::::::::::::::::::::::| #
 # +------------------------------╚════════════╝------------------------------+ #
+
+def get_user(access_token: str) -> None:
+    headers = {"Client-ID": Helix.client_id,
+               "Authorization": f"Bearer {access_token}"}
+    endpoint = f"{Helix.base}/users"
+    user: dict = httpx.get(endpoint, headers=headers,
+                           timeout=None).json()["data"][0]
+    logger.info(f"User {user['display_name']}")
+    user["access_token"] = access_token
+    User.create_table()
+    User.create(**user)
 
 
 def get_follows() -> set[int]:
@@ -415,7 +376,6 @@ def get_followed_streams() -> list[dict]:
     }
     streams = asyncio.run(AsyncRequest(
         "/streams", follows).get_batch(id_key="user_id"))
-    logger.debug(f"Example stream payload: {streams[0]}")
     return streams
 
 
@@ -510,12 +470,6 @@ def settings():
 
 @bt.route("/watch")
 def watch():
-    """
-    type:   stream, vod, clip
-    id:     user_id, vod_id, clip_id
-    url:    twitch.tv/user_login, twitch.tv/videos/vod_id, ...
-    misc:   thumbnail, etc.
-    """
     watch_video(bt.request.query)
     return """<script>setTimeout(function () { window.history.back() });</script>"""
 
@@ -581,29 +535,27 @@ def channel(channel, mode="default", data=None, stream=None):
         else:
             msg = f"User '{channel}' not found"
             return bt.template("error.html", message=msg)
-    match mode:
-        case "vods":
-            vod_type = bt.request.query.get(
-                "vod_type") or "archive"
-            params = {"user_id": streamer.id, "type": vod_type}
-            if before := bt.request.query.get("before"):
-                params["before"] = before
-            elif after := bt.request.query.get("after"):
-                params["after"] = after
-            resp = Request("/videos", params).json()
-            if not resp.get("data"):
-                return """<script>setTimeout(function () { window.history.back() });</script>"""
-            vods = process_vods(resp["data"])
-            pagination = resp["pagination"]["cursor"]
-            return bt.template("channel.html", channel=streamer, vods=vods, vod_type=vod_type, pagination=pagination)
-        case "clips":
-            pass
-        case "emotes":
-            pass
-        case "default":
-            if stream_data := Request("/streams", {"user_id": streamer.id}).json()["data"]:
-                stream = format_streams([stream_data[0]])[0]
-            return bt.template("channel.html", channel=streamer, stream=stream)
+
+    if mode == "vods":
+        vod_type = bt.request.query.get(
+            "vod_type") or "archive"
+        params = {"user_id": streamer.id, "type": vod_type}
+        if before := bt.request.query.get("before"):
+            params["before"] = before
+        elif after := bt.request.query.get("after"):
+            params["after"] = after
+        resp = Request("/videos", params).json()
+        if not resp.get("data"):
+            return """<script>setTimeout(function () { window.history.back() });</script>"""
+        vods = process_vods(resp["data"])
+        pagination = resp["pagination"]["cursor"]
+        return bt.template("channel.html", channel=streamer, vods=vods, vod_type=vod_type, pagination=pagination)
+    elif mode == "clips":
+        pass
+    elif mode == "default":
+        if stream_data := Request("/streams", {"user_id": streamer.id}).json()["data"]:
+            stream = format_streams([stream_data[0]])[0]
+        return bt.template("channel.html", channel=streamer, stream=stream)
 
 
 @bt.route("/c")
@@ -641,9 +593,48 @@ def category(category_id=None):
     pagination = resp["pagination"]["cursor"]
     return bt.template("streams.html", game=game, streams=streams, pagination=pagination)
 
+
 # +------------------------------╔═══════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Utilities ║:::::::::::::::::::::::::::::::| #
 # +------------------------------╚═══════════╝-------------------------------+ #
+
+def cache(ids: set[int], model: Game | Streamer) -> None:
+    endpoint, cachedir = (
+        ("/users", user_cache) if model is Streamer else ("/games", games_cache)
+    )
+    image_tag = "profile_image_url" if model is Streamer else "box_art_url"
+    tmp = {i for i in ids if model.get_or_none(model.id == i) is None}
+    if not tmp:
+        logger.debug(f"No {endpoint[1:]} to cache")
+        return None
+    logger.debug(f"{len(tmp)} {endpoint[1:]} to cache")
+    data = asyncio.run(AsyncRequest(endpoint, tmp).get_batch())
+    for datum in data:
+        if model is Streamer:
+            for key in ["broadcaster_type", "description", "offline_image_url"]:
+                if not datum[key]:
+                    datum.pop(key)
+        else:
+            datum["box_art_url"] = datum["box_art_url"].replace(
+                "-{width}x{height}", "-285x380"
+            )
+    images = [Image(datum["id"], datum[image_tag]) for datum in data]
+
+    def download_image(image: Image) -> None:
+        data = httpx.get(image.url, follow_redirects=True).content
+        imgpath = Path.joinpath(cachedir, f"{image.id}.jpg")
+        with open(imgpath, "wb") as f:
+            f.write(data)
+
+    logger.debug(f"Downloading {len(images)} images")
+
+    with ThreadPoolExecutor() as tp:
+        tp.map(download_image, images)
+
+    logger.debug(f"Caching {len(data)} {endpoint[1:]}")
+    for datum in data:
+        datum[image_tag] = f"/cache{endpoint}/{datum['id']}.jpg"
+        model.create(**datum)
 
 
 def time_elapsed(begin: str, d="") -> str:
@@ -687,10 +678,10 @@ def process_vods(vods: list[dict]) -> list[Vod]:
         Vod(**{k: v for k, v in vod.items() if k in Vod._fields}) for vod in vods]
     return vods_fmt
 
+
 # +------------------------╔════════════════════════╗------------------------+ #
 # |::::::::::::::::::::::::║ Command Line Interface ║::::::::::::::::::::::::| #
 # +------------------------╚════════════════════════╝------------------------+ #
-
 
 def cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
