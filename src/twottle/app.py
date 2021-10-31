@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import platform
 import shlex
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,6 +23,7 @@ import twottle
 module_path = Path(__file__).absolute().parent  # src/twottle
 bt.TEMPLATE_PATH.insert(0, str(Path.joinpath(module_path, "views")))
 static_path = Path.joinpath(module_path, "static")
+SYSTEM = platform.system().lower()
 
 
 # +--------------------------------╔═════════╗-------------------------------+ #
@@ -160,7 +162,7 @@ class Media:
     @classmethod
     def wipe(cls):
         for proc in cls.procs:
-            proc.runtime.terminate()
+            end_proc(proc)
         cls.procs.clear()
 
     @classmethod
@@ -170,15 +172,23 @@ class Media:
             if proc.runtime.poll() is not None:  # None indicates running
                 to_dump.append(proc)
         for proc in to_dump:
-            proc.runtime.terminate()
+            end_proc(proc)
             cls.procs.remove(proc)
 
     @classmethod
     def kill(cls, pid: int):
         for proc in cls.procs:
             if proc.info.pid == pid:
-                proc.runtime.terminate()
+                end_proc(proc)
                 cls.procs.remove(proc)
+
+
+def end_proc(proc: Media):
+    if SYSTEM == "windows":
+        Popen(f"TASKKILL /F /PID {proc.runtime.pid} /T", stdout=DEVNULL)
+    else:
+        proc.runtime.terminate()
+    logger.debug(f"Terminating process {dict(proc.info)}")
 
 
 # +----------------------------╔═════════════════╗---------------------------+ #
