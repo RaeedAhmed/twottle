@@ -2,3 +2,10 @@
 <div class="centered">
     <h3>{{message}}</h3>
 </div>
+%if defined('error'):
+<p>{{error._status_line}}</p>
+%if error.traceback:
+<p>{{error.exception}}</p>
+<p>{{error.traceback}}</p>
+%end
+%end

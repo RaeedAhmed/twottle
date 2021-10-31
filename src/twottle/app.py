@@ -600,7 +600,7 @@ def category(category_id=None):
 @bt.error(404)
 @bt.error(500)
 def error_page(error):
-    return bt.template("error.html", message=error)
+    return bt.template("error.html", message="An error has occured", error=error)
 
 
 # +------------------------------╔═══════════╗-------------------------------+ #
