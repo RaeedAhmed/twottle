@@ -2,10 +2,13 @@
 A web gui for browsing twitch.tv streams and videos on demand. Search for categories or users, and view followed streamers' activity. Requires user login.
 
 ## Installation
+Works on all platforms (Win/Mac/Linux/BSD)
+
 ### Dependencies
-- `python >3.10` (Can relax requirement upon request)
+- `python >=3.10` (Can relax requirement upon request)
 - `streamlink` (via pip/binaries/brew/source explained [here](https://streamlink.github.io/install.html#))
 - multimedia player listed [here](https://streamlink.github.io/players.html#player-compatibility)
+  - Windows: player must be in system PATH
 
 ### PyPi:
 
