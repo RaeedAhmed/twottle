@@ -11,9 +11,8 @@ dynamic = ["version", "description"]
 
 dependencies = [
 	"bottle",
-	"peewee",
 	"httpx",
-	"streamlink",
+	"peewee",
 	"waitress",
 ]
 

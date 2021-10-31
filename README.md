@@ -2,6 +2,11 @@
 A web gui for browsing twitch.tv streams and videos on demand. Search for categories or users, and view followed streamers' activity. Requires user login.
 
 ## Installation
+### Dependencies
+- `python >3.10` (Can relax requirement upon request)
+- `streamlink` (via pip/binaries/brew/source explained [here](https://streamlink.github.io/install.html#))
+- multimedia player listed [here](https://streamlink.github.io/players.html#player-compatibility)
+
 ### PyPi:
 
 `pip install twottle`
@@ -11,16 +16,6 @@ A web gui for browsing twitch.tv streams and videos on demand. Search for catego
 - Build requires [`flit`](https://flit.readthedocs.io/en/latest/)
 - Clone repository and run `flit install` in root directory
 
-## Dependencies
-3.10 requirements are some simple typing changes to the language. On request I can relax the version requirement.
-- `python >3.10` and pip packages
-    - `bottle`
-    - `httpx`
-    - `peewee`
-    - `streamlink`
-    - `waitress`
-
-- multimedia player listed [here](https://streamlink.github.io/players.html#player-compatibility)
 
 ## Usage
 ```
