@@ -163,7 +163,6 @@ class Media:
     def wipe(cls):
         for proc in cls.procs:
             end_proc(proc)
-        cls.procs.clear()
 
     @classmethod
     def update(cls):
@@ -173,21 +172,20 @@ class Media:
                 to_dump.append(proc)
         for proc in to_dump:
             end_proc(proc)
-            cls.procs.remove(proc)
 
     @classmethod
     def kill(cls, pid: int):
         for proc in cls.procs:
             if proc.info.pid == pid:
                 end_proc(proc)
-                cls.procs.remove(proc)
 
 
 def end_proc(proc: Media):
-    if SYSTEM == "windows":
+    if SYSTEM == "windows" and proc.runtime.poll() is None:
         Popen(f"TASKKILL /F /PID {proc.runtime.pid} /T", stdout=DEVNULL)
     else:
         proc.runtime.terminate()
+    Media.procs.remove(proc)
     logger.debug(f"Terminating process {dict(proc.info)}")
 
 
