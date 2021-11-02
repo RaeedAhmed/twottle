@@ -21,8 +21,8 @@ import twottle
 
 # Configuring file paths for referencing
 module_path = Path(__file__).absolute().parent  # src/twottle
-bt.TEMPLATE_PATH.insert(0, str(Path.joinpath(module_path, "views")))
-static_path = Path.joinpath(module_path, "static")
+bt.TEMPLATE_PATH.insert(0, str(module_path / "views"))
+static_path = module_path / "static"
 SYSTEM = platform.system().lower()
 
 
@@ -35,8 +35,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 # Create handlers for console and file
 c_handler = logging.StreamHandler()
-f_handler = logging.FileHandler(
-    Path.joinpath(module_path, "debug.log"), mode="w")
+f_handler = logging.FileHandler(module_path / "debug.log", mode="w")
 c_handler.setLevel(logging.INFO)
 f_handler.setLevel(logging.DEBUG)
 # Format for console and file
@@ -56,8 +55,9 @@ logger.addHandler(f_handler)
 # |::::::::::::::::::::::::::::::::║ Config ║::::::::::::::::::::::::::::::::| #
 # +--------------------------------╚════════╝--------------------------------+ #
 
+
 class Config(ConfigParser):
-    path = Path.joinpath(module_path, "config.ini")
+    path = module_path / "config.ini"
 
     def update(self):
         with open(Config.path, "w") as file:
@@ -89,9 +89,9 @@ config = Config()
 config.read(Config.path)
 
 # cache
-cache_path = Path.joinpath(module_path, "cache")
-user_cache = Path.joinpath(module_path, "cache/users")
-games_cache = Path.joinpath(module_path, "cache/games")
+cache_path = module_path / "cache"
+user_cache = module_path / "cache/users"
+games_cache = module_path / "cache/games"
 user_cache.mkdir(exist_ok=True, parents=True)
 games_cache.mkdir(exist_ok=True, parents=True)
 
@@ -105,7 +105,7 @@ static_pages = [
     "login",
     "cache/",
     "watch",
-    "favicon"
+    "favicon",
 ]
 
 
@@ -113,7 +113,7 @@ static_pages = [
 # |:::::::::::::::::::::::::::::::║ Database ║:::::::::::::::::::::::::::::::| #
 # +-------------------------------╚══════════╝-------------------------------+ #
 
-db = pw.SqliteDatabase(Path.joinpath(module_path, "data.db"))
+db = pw.SqliteDatabase(module_path / "data.db")
 
 
 class BaseModel(pw.Model):
@@ -148,6 +148,7 @@ class Game(BaseModel):
 # +------------------------------╔═══════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Processes ║:::::::::::::::::::::::::::::::| #
 # +------------------------------╚═══════════╝-------------------------------+ #
+
 
 class Media:
     procs: list = []
@@ -193,6 +194,7 @@ def end_proc(proc: Media):
 # |::::::::::::::::::::::::::::║ Data Containers ║:::::::::::::::::::::::::::| #
 # +----------------------------╚═════════════════╝---------------------------+ #
 
+
 class Image(NamedTuple):
     id: str
     url: str
@@ -236,6 +238,7 @@ class SearchResult(NamedTuple):
 # +-----------------------------╔══════════════╗-----------------------------+ #
 # |:::::::::::::::::::::::::::::║ API Requests ║:::::::::::::::::::::::::::::| #
 # +-----------------------------╚══════════════╝-----------------------------+ #
+
 
 class Helix:
     client_id = "o232r2a1vuu2yfki7j3208tvnx8uzq"
@@ -301,24 +304,23 @@ class AsyncRequest:
         self.ids = list(ids)
 
     async def get_batch(self, id_key="id") -> list[dict]:
-        id_lists = [self.ids[x: x + 100] for x in range(0, len(self.ids), 100)]
+        id_lists = [self.ids[x : x + 100] for x in range(0, len(self.ids), 100)]
         async with self.session:
             resps = await asyncio.gather(
                 *(
-                    self.session.get(
-                        "?" + "&".join([f"{id_key}={i}" for i in idlist]))
+                    self.session.get("?" + "&".join([f"{id_key}={i}" for i in idlist]))
                     for idlist in id_lists
                 )
             )
         data = []
-        [data.extend(datum)
-         for resp in resps if (datum := resp.json()["data"])]
+        [data.extend(datum) for resp in resps if (datum := resp.json()["data"])]
         return data
 
 
 # +--------------------------------╔═══════╗---------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Tests ║:::::::::::::::::::::::::::::::::| #
 # +--------------------------------╚═══════╝---------------------------------+ #
+
 
 def check_user() -> None:
     logger.debug("Checking user")
@@ -342,12 +344,11 @@ def check_cache() -> None:
 # |::::::::::::::::::::::::::::::║ Fetch Data ║::::::::::::::::::::::::::::::| #
 # +------------------------------╚════════════╝------------------------------+ #
 
+
 def get_user(access_token: str) -> None:
-    headers = {"Client-ID": Helix.client_id,
-               "Authorization": f"Bearer {access_token}"}
+    headers = {"Client-ID": Helix.client_id, "Authorization": f"Bearer {access_token}"}
     endpoint = f"{Helix.base}/users"
-    user: dict = httpx.get(endpoint, headers=headers,
-                           timeout=None).json()["data"][0]
+    user: dict = httpx.get(endpoint, headers=headers, timeout=None).json()["data"][0]
     logger.info(f"User {user['display_name']}")
     user["access_token"] = access_token
     User.create_table()
@@ -370,11 +371,12 @@ def update_follows() -> None:
         if (sid in follows and streamer.followed is not True) or (
             sid not in follows and streamer.followed is True
         ):
-            logger.info(
-                f"{'un'*streamer.followed}following {streamer.display_name}")
-            db.execute(Streamer.update(followed=not streamer.followed).where(
-                Streamer.id == streamer.id
-            ))
+            logger.info(f"{'un'*streamer.followed}following {streamer.display_name}")
+            db.execute(
+                Streamer.update(followed=not streamer.followed).where(
+                    Streamer.id == streamer.id
+                )
+            )
 
 
 def get_followed_streams() -> list[dict]:
@@ -382,8 +384,7 @@ def get_followed_streams() -> list[dict]:
         streamer.id
         for streamer in Streamer.select().where(Streamer.followed == True).execute()
     }
-    streams = asyncio.run(AsyncRequest(
-        "/streams", follows).get_batch(id_key="user_id"))
+    streams = asyncio.run(AsyncRequest("/streams", follows).get_batch(id_key="user_id"))
     return streams
 
 
@@ -408,11 +409,13 @@ def format_streams(streams: list[dict]) -> list[Stream]:
                 stream["box_art_url"] = game.box_art_url
         if not gid or not game:
             stream["game_name"] = "Streaming"
-            stream["box_art_url"] = (
-                "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
-            )
-    streams_fmt: list[Stream] = [Stream(
-        **{k: v for k, v in stream.items() if k in Stream._fields}) for stream in streams]
+            stream[
+                "box_art_url"
+            ] = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
+    streams_fmt: list[Stream] = [
+        Stream(**{k: v for k, v in stream.items() if k in Stream._fields})
+        for stream in streams
+    ]
     streams_fmt.sort(key=lambda stream: stream.viewer_count, reverse=True)
     return streams_fmt
 
@@ -497,11 +500,9 @@ def watching():
 
 @bt.route("/search")
 def search():
-
     def search_results(query: str, endpoint: str):
         model = Game if "categories" in endpoint else Streamer
-        resp = Request(
-            endpoint, {"query": query, "first": 5}).json()
+        resp = Request(endpoint, {"query": query, "first": 5}).json()
         if results := resp.get("data"):
             ids = {int(result["id"]) for result in results}
             cache(ids, model)
@@ -514,8 +515,7 @@ def search():
         req = partial(search_results, query)
 
         with ThreadPoolExecutor() as tp:
-            results = list(
-                tp.map(req, ["/search/channels", "/search/categories"]))
+            results = list(tp.map(req, ["/search/channels", "/search/categories"]))
     else:
         results = []
     return bt.template("search.html", query=query, results=results)
@@ -546,8 +546,7 @@ def channel(channel, mode="default", data=None, stream=None):
             return bt.template("error.html", message=msg)
 
     if mode == "vods":
-        vod_type = bt.request.query.get(
-            "vod_type") or "archive"
+        vod_type = bt.request.query.get("vod_type") or "archive"
         params = {"user_id": streamer.id, "type": vod_type}
         if before := bt.request.query.get("before"):
             params["before"] = before
@@ -558,7 +557,13 @@ def channel(channel, mode="default", data=None, stream=None):
             return """<script>setTimeout(function () { window.history.back() });</script>"""
         vods = process_vods(resp["data"])
         pagination = resp["pagination"]["cursor"]
-        return bt.template("channel.html", channel=streamer, vods=vods, vod_type=vod_type, pagination=pagination)
+        return bt.template(
+            "channel.html",
+            channel=streamer,
+            vods=vods,
+            vod_type=vod_type,
+            pagination=pagination,
+        )
     elif mode == "clips":
         pass
     elif mode == "default":
@@ -600,7 +605,9 @@ def category(category_id=None):
         return """<script>setTimeout(function () { window.history.back() });</script>"""
     streams = format_streams(resp["data"])
     pagination = resp["pagination"]["cursor"]
-    return bt.template("streams.html", game=game, streams=streams, pagination=pagination)
+    return bt.template(
+        "streams.html", game=game, streams=streams, pagination=pagination
+    )
 
 
 @bt.error(400)
@@ -614,6 +621,7 @@ def error_page(error):
 # +------------------------------╔═══════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::║ Utilities ║:::::::::::::::::::::::::::::::| #
 # +------------------------------╚═══════════╝-------------------------------+ #
+
 
 def cache(ids: set[int], model: Game | Streamer) -> None:
     endpoint, cachedir = (
@@ -639,7 +647,7 @@ def cache(ids: set[int], model: Game | Streamer) -> None:
 
     def download_image(image: Image) -> None:
         data = httpx.get(image.url, follow_redirects=True).content
-        imgpath = Path.joinpath(cachedir, f"{image.id}.jpg")
+        imgpath = cachedir / f"{image.id}.jpg"
         with open(imgpath, "wb") as f:
             f.write(data)
 
@@ -656,8 +664,7 @@ def cache(ids: set[int], model: Game | Streamer) -> None:
 
 def time_elapsed(begin: str, d="") -> str:
     """start: UTC time"""
-    start = datetime.strptime(
-        begin, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    start = datetime.strptime(begin, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     current = datetime.now(tz=timezone.utc)
     elapsed = round((current - start).total_seconds())
     delta = str(timedelta(seconds=elapsed))
@@ -677,7 +684,8 @@ def watch_video(info: bt.FormsDict):
         )
     else:
         command = shlex.split(
-            f"{c['app']} {c['app_args']} --msg-level=all=no {info.url}")
+            f"{c['app']} {c['app_args']} --msg-level=all=no {info.url}"
+        )
     Media(command, info)
 
 
@@ -692,7 +700,8 @@ def process_vods(vods: list[dict]) -> list[Vod]:
             ] = "https://vod-secure.twitch.tv/_404/404_processing_320x180.png"
         vod["created_at"] = time_elapsed(vod["created_at"])
     vods_fmt: list[Vod] = [
-        Vod(**{k: v for k, v in vod.items() if k in Vod._fields}) for vod in vods]
+        Vod(**{k: v for k, v in vod.items() if k in Vod._fields}) for vod in vods
+    ]
     return vods_fmt
 
 
@@ -700,13 +709,13 @@ def process_vods(vods: list[dict]) -> list[Vod]:
 # |::::::::::::::::::::::::║ Command Line Interface ║::::::::::::::::::::::::| #
 # +------------------------╚════════════════════════╝------------------------+ #
 
+
 def cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Web GUI for streamlink cli with Twitch account integration"
     )
     actions = parser.add_mutually_exclusive_group()
-    actions.add_argument("--reset", action="store_true",
-                         help="reset config file")
+    actions.add_argument("--reset", action="store_true", help="reset config file")
     actions.add_argument(
         "--logout", action="store_true", help="remove user from app, prompt login again"
     )
@@ -740,8 +749,7 @@ def main():
     else:
         logger.info("Go to http://localhost:8080")
         try:
-            waitress.serve(app=bt.app(), host="localhost",
-                           threads=32, _quiet=True)
+            waitress.serve(app=bt.app(), host="localhost", threads=32, _quiet=True)
         except KeyboardInterrupt:
             pass
         finally:
