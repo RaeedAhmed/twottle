@@ -14,6 +14,8 @@ dependencies = [
 	"httpx",
 	"peewee",
 	"waitress",
+	"streamlink",
+	"yt-dlp",
 ]
 
 [project.urls]
