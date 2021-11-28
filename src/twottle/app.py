@@ -252,7 +252,7 @@ class Helix:
         "&force_verify=true"
     )
 
-    @staticmethod
+    @property
     def headers():
         return {
             "Client-ID": Helix.client_id,
@@ -266,7 +266,7 @@ class Request:
         self.params = params
         self.session = httpx.Client(
             base_url=Helix.base + endpoint,
-            headers=Helix.headers(),
+            headers=Helix.headers,
             params=params,
             transport=transport,
         )
@@ -299,7 +299,7 @@ class AsyncRequest:
     def __init__(self, endpoint: str, ids: set):
         transport = httpx.AsyncHTTPTransport(retries=3)
         self.session = httpx.AsyncClient(
-            base_url=Helix.base + endpoint, headers=Helix.headers(), transport=transport
+            base_url=Helix.base + endpoint, headers=Helix.headers, transport=transport
         )
         self.ids = list(ids)
 
@@ -374,7 +374,7 @@ def update_follows() -> None:
             logger.info(f"{'un'*streamer.followed}following {streamer.display_name}")
             db.execute(
                 Streamer.update(followed=not streamer.followed).where(
-                    Streamer.id == streamer.id
+                    Streamer.id == sid
                 )
             )
 
@@ -593,7 +593,7 @@ def category(category_id=None):
                 cache({gid}, Game)
                 game = Game.get_by_id(gid)
             else:
-                msg = f"Game not found"
+                msg = "Game not found"
                 return bt.template("error.html", message=msg)
         params = {"game_id": game.id, "first": 24}
     if before := bt.request.query.get("before"):
