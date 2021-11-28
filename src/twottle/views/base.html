@@ -19,21 +19,8 @@
     </script>
     % end
     <script type="text/javascript">
-        function popup(url) {
-            var width = 400;
-            var height = screen.availHeight;
-            var left = screen.availWidth - width;
-            var top = 0;
-            var params = 'width=' + width + ', height=' + height;
-            params += ', top=' + top + ', left=' + left;
-            params += ', directories=no';
-            params += ', location=no';
-            params += ', menubar=no';
-            params += ', resizable=no';
-            params += ', scrollbars=no';
-            params += ', status=no';
-            params += ', toolbar=no';
-            newwin = window.open(url, 'customWindow', params);
+        function popup(url, params) {
+            newwin = window.open(url, 'chatWindow', params);
             if (window.focus) { newwin.focus() }
             return false;
         }

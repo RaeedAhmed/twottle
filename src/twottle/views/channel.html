@@ -8,7 +8,7 @@
             <span class="channel_name"><b>{{channel.display_name}}</b> - {{channel.broadcaster_type}}
                 <div class="channel_links" style="display: inline-flex; position: relative;">
                     <a href="javascript: void(0)"
-                        onclick="popup('https://www.twitch.tv/popout/{{channel.login}}/chat?popout=')">
+                        onclick="popup('https://www.twitch.tv/popout/{{channel.login}}/chat?popout=', {{chat_params}})">
                         <i class="gg-comment"></i>
                     </a>
                     <a href="https://twitch.tv/{{channel.login}}/about" target="_blank"><i
