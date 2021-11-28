@@ -108,6 +108,9 @@ static_pages = [
     "favicon",
 ]
 
+# abort page
+back_script = """<script>setTimeout(function () { window.history.back() });</script>"""
+
 
 # +-------------------------------╔══════════╗-------------------------------+ #
 # |:::::::::::::::::::::::::::::::║ Database ║:::::::::::::::::::::::::::::::| #
@@ -230,6 +233,11 @@ class Vod(NamedTuple):
     duration: str
 
 
+class Clip(NamedTuple):
+    id: str
+    url: str
+
+
 class SearchResult(NamedTuple):
     model: str
     results: list[pw.ModelSelect]
@@ -252,7 +260,7 @@ class Helix:
         "&force_verify=true"
     )
 
-    @property
+    @staticmethod
     def headers():
         return {
             "Client-ID": Helix.client_id,
@@ -266,7 +274,7 @@ class Request:
         self.params = params
         self.session = httpx.Client(
             base_url=Helix.base + endpoint,
-            headers=Helix.headers,
+            headers=Helix.headers(),
             params=params,
             transport=transport,
         )
@@ -299,21 +307,23 @@ class AsyncRequest:
     def __init__(self, endpoint: str, ids: set):
         transport = httpx.AsyncHTTPTransport(retries=3)
         self.session = httpx.AsyncClient(
-            base_url=Helix.base + endpoint, headers=Helix.headers, transport=transport
+            base_url=Helix.base + endpoint, headers=Helix.headers(), transport=transport
         )
         self.ids = list(ids)
 
     async def get_batch(self, id_key="id") -> list[dict]:
-        id_lists = [self.ids[x : x + 100] for x in range(0, len(self.ids), 100)]
+        id_lists = [self.ids[x: x + 100] for x in range(0, len(self.ids), 100)]
         async with self.session:
             resps = await asyncio.gather(
                 *(
-                    self.session.get("?" + "&".join([f"{id_key}={i}" for i in idlist]))
+                    self.session.get(
+                        "?" + "&".join([f"{id_key}={i}" for i in idlist]))
                     for idlist in id_lists
                 )
             )
         data = []
-        [data.extend(datum) for resp in resps if (datum := resp.json()["data"])]
+        [data.extend(datum)
+         for resp in resps if (datum := resp.json()["data"])]
         return data
 
 
@@ -346,9 +356,11 @@ def check_cache() -> None:
 
 
 def get_user(access_token: str) -> None:
-    headers = {"Client-ID": Helix.client_id, "Authorization": f"Bearer {access_token}"}
+    headers = {"Client-ID": Helix.client_id,
+               "Authorization": f"Bearer {access_token}"}
     endpoint = f"{Helix.base}/users"
-    user: dict = httpx.get(endpoint, headers=headers, timeout=None).json()["data"][0]
+    user: dict = httpx.get(endpoint, headers=headers,
+                           timeout=None).json()["data"][0]
     logger.info(f"User {user['display_name']}")
     user["access_token"] = access_token
     User.create_table()
@@ -371,7 +383,8 @@ def update_follows() -> None:
         if (sid in follows and streamer.followed is not True) or (
             sid not in follows and streamer.followed is True
         ):
-            logger.info(f"{'un'*streamer.followed}following {streamer.display_name}")
+            logger.info(
+                f"{'un'*streamer.followed}following {streamer.display_name}")
             db.execute(
                 Streamer.update(followed=not streamer.followed).where(
                     Streamer.id == sid
@@ -384,7 +397,8 @@ def get_followed_streams() -> list[dict]:
         streamer.id
         for streamer in Streamer.select().where(Streamer.followed == True).execute()
     }
-    streams = asyncio.run(AsyncRequest("/streams", follows).get_batch(id_key="user_id"))
+    streams = asyncio.run(AsyncRequest(
+        "/streams", follows).get_batch(id_key="user_id"))
     return streams
 
 
@@ -451,7 +465,10 @@ def _close():
 def index():
     update_follows()
     streams = format_streams(get_followed_streams())
-    return bt.template("index.html", user=User.get_or_none(), streams=streams)
+    return bt.template("index.html",
+                       user=User.get_or_none(),
+                       streams=streams,
+                       chat_params=config["USER"]["chat params"])
 
 
 @bt.route("/login")
@@ -483,7 +500,7 @@ def settings():
 @bt.route("/watch")
 def watch():
     watch_video(bt.request.query)
-    return """<script>setTimeout(function () { window.history.back() });</script>"""
+    return back_script
 
 
 @bt.route("/watching", method=["GET", "POST"])
@@ -515,7 +532,8 @@ def search():
         req = partial(search_results, query)
 
         with ThreadPoolExecutor() as tp:
-            results = list(tp.map(req, ["/search/channels", "/search/categories"]))
+            results = list(
+                tp.map(req, ["/search/channels", "/search/categories"]))
     else:
         results = []
     return bt.template("search.html", query=query, results=results)
@@ -547,14 +565,10 @@ def channel(channel, mode="default", data=None, stream=None):
 
     if mode == "vods":
         vod_type = bt.request.query.get("vod_type") or "archive"
-        params = {"user_id": streamer.id, "type": vod_type}
-        if before := bt.request.query.get("before"):
-            params["before"] = before
-        elif after := bt.request.query.get("after"):
-            params["after"] = after
+        params = add_page({"user_id": streamer.id, "type": vod_type})
         resp = Request("/videos", params).json()
         if not resp.get("data"):
-            return """<script>setTimeout(function () { window.history.back() });</script>"""
+            return back_script
         vods = process_vods(resp["data"])
         pagination = resp["pagination"]["cursor"]
         return bt.template(
@@ -563,13 +577,23 @@ def channel(channel, mode="default", data=None, stream=None):
             vods=vods,
             vod_type=vod_type,
             pagination=pagination,
+            chat_params=config["USER"]["chat params"],
         )
     elif mode == "clips":
-        pass
+        start = bt.request.query.get("start")
+        end = bt.request.query.get("end")
+        params = add_page({"broadcaster_id": streamer.id, "first": 24})
+        resp = Request("/clips", params).json()
+        if not resp.get("data"):
+            return back_script
+        clips = process_clips()
     elif mode == "default":
         if stream_data := Request("/streams", {"user_id": streamer.id}).json()["data"]:
             stream = format_streams([stream_data[0]])[0]
-        return bt.template("channel.html", channel=streamer, stream=stream)
+        return bt.template("channel.html",
+                           channel=streamer,
+                           stream=stream,
+                           chat_params=config["USER"]["chat params"])
 
 
 @bt.route("/c")
@@ -596,17 +620,18 @@ def category(category_id=None):
                 msg = "Game not found"
                 return bt.template("error.html", message=msg)
         params = {"game_id": game.id, "first": 24}
-    if before := bt.request.query.get("before"):
-        params["before"] = before
-    elif after := bt.request.query.get("after"):
-        params["after"] = after
+    params = add_page(params)
     resp = Request("/streams", params).json()
     if not resp.get("data"):
-        return """<script>setTimeout(function () { window.history.back() });</script>"""
+        return back_script
     streams = format_streams(resp["data"])
     pagination = resp["pagination"]["cursor"]
     return bt.template(
-        "streams.html", game=game, streams=streams, pagination=pagination
+        "streams.html",
+        game=game,
+        streams=streams,
+        pagination=pagination,
+        chat_params=config["USER"]["chat params"],
     )
 
 
@@ -664,7 +689,8 @@ def cache(ids: set[int], model: Game | Streamer) -> None:
 
 def time_elapsed(begin: str, d="") -> str:
     """start: UTC time"""
-    start = datetime.strptime(begin, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    start = datetime.strptime(
+        begin, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     current = datetime.now(tz=timezone.utc)
     elapsed = round((current - start).total_seconds())
     delta = str(timedelta(seconds=elapsed))
@@ -676,17 +702,25 @@ def time_elapsed(begin: str, d="") -> str:
 
 def watch_video(info: bt.FormsDict):
     c = config["USER"]
-    if config.getboolean("USER", "multi_stream") is False:
+    if config.getboolean("USER", "one instance") is True:
         Media.wipe()
     if info.type == "streaming":
         command = shlex.split(
-            f"streamlink -l none -p {c['app']} -a '{c['app_args']}' {c['sl_args']} {info.url} best"
+            f"streamlink -l none -p {c['media player']} -a '{c['media player args']}' {c['streamlink args']} {info.url} {c['video quality']}"
         )
     else:
         command = shlex.split(
-            f"{c['app']} {c['app_args']} --msg-level=all=no {info.url}"
+            f"{c['media player']} {c['media player args']} --msg-level=all=no {info.url}"
         )
     Media(command, info)
+
+
+def add_page(params: dict) -> dict:
+    if before := bt.request.query.get("before"):
+        params["before"] = before
+    elif after := bt.request.query.get("after"):
+        params["after"] = after
+    return params
 
 
 def process_vods(vods: list[dict]) -> list[Vod]:
@@ -705,6 +739,10 @@ def process_vods(vods: list[dict]) -> list[Vod]:
     return vods_fmt
 
 
+def process_clips(clips: list[dict]) -> list[Clip]:
+    return [Clip(**{k: v for k, v in clip.items() if k in Clip._fields}) for clip in clips]
+
+
 # +------------------------╔════════════════════════╗------------------------+ #
 # |::::::::::::::::::::::::║ Command Line Interface ║::::::::::::::::::::::::| #
 # +------------------------╚════════════════════════╝------------------------+ #
@@ -715,7 +753,8 @@ def cli() -> argparse.ArgumentParser:
         description="Web GUI for streamlink cli with Twitch account integration"
     )
     actions = parser.add_mutually_exclusive_group()
-    actions.add_argument("--reset", action="store_true", help="reset config file")
+    actions.add_argument("--reset", action="store_true",
+                         help="reset config file")
     actions.add_argument(
         "--logout", action="store_true", help="remove user from app, prompt login again"
     )
@@ -749,7 +788,8 @@ def main():
     else:
         logger.info("Go to http://localhost:8080")
         try:
-            waitress.serve(app=bt.app(), host="localhost", threads=32, _quiet=True)
+            waitress.serve(app=bt.app(), host="localhost",
+                           threads=32, _quiet=True)
         except KeyboardInterrupt:
             pass
         finally:
