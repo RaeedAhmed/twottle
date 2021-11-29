@@ -209,14 +209,14 @@ class Stream(NamedTuple):
     user_login: str
     user_name: str  # Display Name
     game_id: str
-    game_name: str
     type: str  # 'live' or ''
     title: str
     viewer_count: str
     thumbnail_url: str  # -480x270
     profile_image_url: str  # from user_id
     uptime: str  # time_elapsed(started_at)
-    box_art_url: str  # from game_id
+    game_name: str = "Streaming"
+    box_art_url: str = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
 
 
 class Vod(NamedTuple):
@@ -236,6 +236,15 @@ class Vod(NamedTuple):
 class Clip(NamedTuple):
     id: str
     url: str
+    title: str
+    thumbnail_url: str
+    game_id: str
+    vod_link: str
+    time_since: str
+    view_count: str
+    duration: str
+    game_name: str = "Streaming"  # if no game id
+    box_art_url: str = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
 
 
 class SearchResult(NamedTuple):
@@ -304,15 +313,21 @@ class Request:
 
 
 class AsyncRequest:
-    def __init__(self, endpoint: str, ids: set):
+    def __init__(self, endpoint: str):
         transport = httpx.AsyncHTTPTransport(retries=3)
         self.session = httpx.AsyncClient(
             base_url=Helix.base + endpoint, headers=Helix.headers(), transport=transport
         )
-        self.ids = list(ids)
 
-    async def get_batch(self, id_key="id") -> list[dict]:
-        id_lists = [self.ids[x: x + 100] for x in range(0, len(self.ids), 100)]
+    async def get(self, ids: list) -> list[dict]:
+        async with self.session:
+            resps = await asyncio.gather(
+                *(self.session.get(f"?id={i}") for i in ids)
+            )
+        return [item["data"][0] for resp in resps if (item := resp.json())]
+
+    async def get_batch(self, ids: list, id_key="id") -> list[dict]:
+        id_lists = [ids[x: x + 100] for x in range(0, len(ids), 100)]
         async with self.session:
             resps = await asyncio.gather(
                 *(
@@ -398,7 +413,7 @@ def get_followed_streams() -> list[dict]:
         for streamer in Streamer.select().where(Streamer.followed == True).execute()
     }
     streams = asyncio.run(AsyncRequest(
-        "/streams", follows).get_batch(id_key="user_id"))
+        "/streams").get_batch(list(follows), id_key="user_id"))
     return streams
 
 
@@ -423,9 +438,6 @@ def format_streams(streams: list[dict]) -> list[Stream]:
                 stream["box_art_url"] = game.box_art_url
         if not gid or not game:
             stream["game_name"] = "Streaming"
-            stream[
-                "box_art_url"
-            ] = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
     streams_fmt: list[Stream] = [
         Stream(**{k: v for k, v in stream.items() if k in Stream._fields})
         for stream in streams
@@ -579,14 +591,29 @@ def channel(channel, mode="default", data=None, stream=None):
             pagination=pagination,
             chat_params=config["USER"]["chat params"],
         )
+
     elif mode == "clips":
-        start = bt.request.query.get("start")
-        end = bt.request.query.get("end")
-        params = add_page({"broadcaster_id": streamer.id, "first": 24})
+        started_at = bt.request.query.get("started_at")
+        ended_at = bt.request.query.get("ended_at")
+        offset = "T00:00:00Z"
+        params = add_page({"broadcaster_id": streamer.id,
+                          "first": 30, "started_at": started_at+offset, "ended_at": ended_at+offset})
         resp = Request("/clips", params).json()
-        if not resp.get("data"):
+        if not (clips := resp["data"]):
             return back_script
-        clips = process_clips()
+        clips = process_clips(clips)
+        clips.sort(key=lambda clip: clip.view_count, reverse=True)
+        pagination = resp["pagination"]["cursor"]
+        return bt.template(
+            "channel.html",
+            channel=streamer,
+            clips=clips,
+            started_at=started_at,
+            ended_at=ended_at,
+            pagination=pagination,
+            chat_params=config["USER"]["chat params"],
+        )
+
     elif mode == "default":
         if stream_data := Request("/streams", {"user_id": streamer.id}).json()["data"]:
             stream = format_streams([stream_data[0]])[0]
@@ -606,7 +633,7 @@ def category(category_id=None):
         games = [Game.get_by_id(int(game["id"])) for game in resp]
         return bt.template("games.html", games=games)
     if category_id == "all":
-        params = {"first": 24}
+        params = {"first": 30}
         game = None
     else:
         game = Game.get_or_none(Game.id == category_id)
@@ -619,7 +646,7 @@ def category(category_id=None):
             else:
                 msg = "Game not found"
                 return bt.template("error.html", message=msg)
-        params = {"game_id": game.id, "first": 24}
+        params = {"game_id": game.id, "first": 30}
     params = add_page(params)
     resp = Request("/streams", params).json()
     if not resp.get("data"):
@@ -658,7 +685,7 @@ def cache(ids: set[int], model: Game | Streamer) -> None:
         logger.debug(f"No {endpoint[1:]} to cache")
         return None
     logger.debug(f"{len(tmp)} {endpoint[1:]} to cache")
-    data = asyncio.run(AsyncRequest(endpoint, tmp).get_batch())
+    data = asyncio.run(AsyncRequest(endpoint).get_batch(list(tmp)))
     for datum in data:
         if model is Streamer:
             for key in ["broadcaster_type", "description", "offline_image_url"]:
@@ -740,6 +767,36 @@ def process_vods(vods: list[dict]) -> list[Vod]:
 
 
 def process_clips(clips: list[dict]) -> list[Clip]:
+    cache({int(gid) for clip in clips if (gid := clip["game_id"])}, Game)
+    for clip in clips:
+        clip["time_since"] = time_elapsed(clip["created_at"])
+        if clip["game_id"]:
+            game: Game = Game.get(int(clip["game_id"]))
+            clip["box_art_url"] = game.box_art_url
+            clip["game_name"] = game.name
+    to_fetch = [vod_id for clip in clips if (vod_id := clip["video_id"])]
+    vods: list[dict] = asyncio.run(AsyncRequest("/videos").get(to_fetch))
+    for clip in clips:
+        if clip["video_id"]:
+            clip["vod"] = vods.pop(0)  # Consume vod if vod exists for clip
+            vod_id, timestamp = clip["video_id"], clip["created_at"]
+            vod_start = datetime.strptime(
+                clip["vod"]["created_at"], "%Y-%m-%dT%H:%M:%SZ"
+            ).replace(tzinfo=timezone.utc)
+            timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=timezone.utc
+            )
+            elapsed = round(
+                (timestamp - vod_start).total_seconds() - int(float(clip["duration"]) + 0.5))
+            if "h" not in clip["vod"]["duration"]:
+                clip["vod"]["duration"] = f"0h{clip['vod']['duration']}"
+            minutes, seconds = divmod(elapsed, 60)
+            hours, minutes = divmod(minutes, 60)
+            clip[
+                "vod_link"
+            ] = f"http://www.twitch.tv/videos/{vod_id}/?t={hours}h{minutes}m{seconds}s"
+        else:
+            clip["vod_link"] = None
     return [Clip(**{k: v for k, v in clip.items() if k in Clip._fields}) for clip in clips]
 
 
