@@ -147,6 +147,13 @@ button.search:hover {
     grid-template-areas: "card-top" "card-mid" "card-bottom";
 }
 
+.card p {
+    text-overflow: ellipsis;
+    white-space:
+    nowrap;
+    overflow: hidden;
+}
+
 .card-top {
     display: grid;
     grid-template-columns: 75px minmax(0, 1fr) 75px;
@@ -198,7 +205,7 @@ button.search:hover {
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0px 0px;
     grid-auto-flow: row;
-    grid-template-areas: "vid_title" "game_name";
+    grid-template-areas: "vid_title" "game_name" "vod_button";
     grid-area: text_info;
 }
 
