@@ -790,11 +790,16 @@ def process_clips(clips: list[dict]) -> list[Clip]:
                 (timestamp - vod_start).total_seconds() - int(float(clip["duration"]) + 0.5))
             if "h" not in clip["vod"]["duration"]:
                 clip["vod"]["duration"] = f"0h{clip['vod']['duration']}"
-            minutes, seconds = divmod(elapsed, 60)
-            hours, minutes = divmod(minutes, 60)
-            clip[
-                "vod_link"
-            ] = f"http://www.twitch.tv/videos/{vod_id}/?t={hours}h{minutes}m{seconds}s"
+            vd = datetime.strptime(clip["vod"]["duration"], "%Hh%Mm%Ss").time()
+            vod_duration = timedelta(hours=vd.hour, minutes=vd.minute, seconds=vd.second).total_seconds()
+            if elapsed > vod_duration:
+                clip["vod_link"] = f"http://www.twitch.tv/videos/{vod_id}/"
+            else:
+                minutes, seconds = divmod(elapsed, 60)
+                hours, minutes = divmod(minutes, 60)
+                clip[
+                    "vod_link"
+                ] = f"http://www.twitch.tv/videos/{vod_id}/?t={hours}h{minutes}m{seconds}s"
         else:
             clip["vod_link"] = None
     return [Clip(**{k: v for k, v in clip.items() if k in Clip._fields}) for clip in clips]
