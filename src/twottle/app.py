@@ -788,8 +788,13 @@ def process_clips(clips: list[dict]) -> list[Clip]:
             )
             elapsed = round(
                 (timestamp - vod_start).total_seconds() - int(float(clip["duration"]) + 0.5))
-            if "h" not in clip["vod"]["duration"]:
-                clip["vod"]["duration"] = f"0h{clip['vod']['duration']}"
+            duration = clip["vod"]["duration"]
+            if "h" not in duration:
+                duration = f"0h{duration}"
+            if "m" not in duration:
+                a, b = duration.split("h")
+                duration = a + "h0m" + b
+            clip["vod"]["duration"] = duration
             vd = datetime.strptime(clip["vod"]["duration"], "%Hh%Mm%Ss").time()
             vod_duration = timedelta(hours=vd.hour, minutes=vd.minute, seconds=vd.second).total_seconds()
             if elapsed > vod_duration:
