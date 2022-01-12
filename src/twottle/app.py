@@ -662,6 +662,16 @@ def category(category_id=None):
     )
 
 
+@bt.route("/following")
+def following():
+    follows = (
+        Streamer.select()
+        .where(Streamer.followed == True)
+        .order_by(pw.fn.LOWER(Streamer.display_name))
+        )
+    return bt.template("following.html", follows=follows)
+
+
 @bt.error(400)
 @bt.error(403)
 @bt.error(404)
@@ -796,7 +806,8 @@ def process_clips(clips: list[dict]) -> list[Clip]:
                 duration = a + "h0m" + b
             clip["vod"]["duration"] = duration
             vd = datetime.strptime(clip["vod"]["duration"], "%Hh%Mm%Ss").time()
-            vod_duration = timedelta(hours=vd.hour, minutes=vd.minute, seconds=vd.second).total_seconds()
+            vod_duration = timedelta(
+                hours=vd.hour, minutes=vd.minute, seconds=vd.second).total_seconds()
             if elapsed > vod_duration:
                 clip["vod_link"] = f"http://www.twitch.tv/videos/{vod_id}/"
             else:

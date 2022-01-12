@@ -1,0 +1,17 @@
+% rebase('base.html', title=f"Following")
+<h2>Following {{len(follows)}} channels</h2>
+<div class="card-grid">
+    % for follow in follows:
+    <div class="card">
+        <div class="card-top">
+            <div class="profile_pic"><a href="/u/{{follow.login}}"><img src="{{follow.profile_image_url}}"
+                        width="100%"></a></div>
+            <div class="display_name">
+                <h3>{{follow.display_name}}</h3>
+            </div>
+            <div class="channel_links" style="display: inline-flex; position: relative;">
+                <a href="https://twitch.tv/{{follow.login}}/about" target="_blank"><i
+                        class="gg-arrow-top-right-r"></i></a>
+            </div>
+    </div>
+</div>
