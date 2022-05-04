@@ -19,36 +19,58 @@ import waitress
 
 import twottle
 
+SYSTEM = platform.system().lower()  # Current OS
+
+
 # Configuring file paths for referencing
 module_path = Path(__file__).absolute().parent  # src/twottle
+# tells bottle where to find html files
 bt.TEMPLATE_PATH.insert(0, str(module_path / "views"))
-static_path = module_path / "static"
-SYSTEM = platform.system().lower()
+static_path = module_path / "static"  # server static files e.g styles.css
+# User/Category image cache
+cache_path = module_path / "cache"
+user_cache = cache_path / "users"
+games_cache = cache_path / "games"
 
+
+def mk_cache_dir() -> None:
+    """
+    Ensure image paths are valid when downloading/accessing
+    """
+    user_cache.mkdir(exist_ok=True, parents=True)
+    games_cache.mkdir(exist_ok=True, parents=True)
 
 # +--------------------------------╔═════════╗-------------------------------+ #
 # |::::::::::::::::::::::::::::::::║ Logging ║:::::::::::::::::::::::::::::::| #
 # +--------------------------------╚═════════╝-------------------------------+ #
 
-# Logger object
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-# Create handlers for console and file
-c_handler = logging.StreamHandler()
-f_handler = logging.FileHandler(module_path / "debug.log", mode="w")
-c_handler.setLevel(logging.INFO)
-f_handler.setLevel(logging.DEBUG)
-# Format for console and file
-c_format = logging.Formatter("\n%(message)s")
-f_format = logging.Formatter(
-    fmt="\n%(asctime)s\nLine %(lineno)d: %(funcName)s()\n%(message)s",
-    datefmt="%m/%d/%Y %I:%M:%S %p",
-)
-c_handler.setFormatter(c_format)
-f_handler.setFormatter(f_format)
-# Add handlers to the logger
-logger.addHandler(c_handler)
-logger.addHandler(f_handler)
+
+
+def set_logger(level: int) -> None:
+    """
+    Create logger with stdout and file streams
+    level of stdout is set by argparse (default level: logging.INFO)
+    """
+    # Logger object
+    logger.setLevel(logging.DEBUG)
+    # Create handlers for console and file
+    c_handler = logging.StreamHandler()
+    f_handler = logging.FileHandler(module_path / "debug.log", mode="w")
+    c_handler.setLevel(level)
+    f_handler.setLevel(logging.DEBUG)
+    # Format for console and file
+    c_format = logging.Formatter("\n%(message)s")
+    f_format = logging.Formatter(
+        fmt="\n%(asctime)s\nLine %(lineno)d: %(funcName)s()\n%(message)s",
+        datefmt="%m/%d/%Y %I:%M:%S %p",
+    )
+    c_handler.setFormatter(c_format)
+    f_handler.setFormatter(f_format)
+    # Add handlers to the logger
+    logger.addHandler(c_handler)
+    logger.addHandler(f_handler)
 
 
 # +--------------------------------╔════════╗--------------------------------+ #
@@ -69,6 +91,9 @@ class Config(ConfigParser):
         logger.info("Reset settings")
 
     def apply(self, formdata: bt.FormsDict) -> list[str]:
+        """
+        Parse form data from /settings and check for changed or default values
+        """
         settings = {k: v for k, v in dict(formdata).items() if v}
         changes = []
         for k, v in settings.items():
@@ -78,7 +103,7 @@ class Config(ConfigParser):
             else:
                 self["USER"][k] = v
             if old != v:
-                changes.append(change := f"{k}: {old} -> {v}")
+                changes.append(change := f"{k}:\n{old} -> {v}")
                 logger.info(change)
         self.update()
         return changes
@@ -87,13 +112,6 @@ class Config(ConfigParser):
 # init config
 config = Config()
 config.read(Config.path)
-
-# cache
-cache_path = module_path / "cache"
-user_cache = module_path / "cache/users"
-games_cache = module_path / "cache/games"
-user_cache.mkdir(exist_ok=True, parents=True)
-games_cache.mkdir(exist_ok=True, parents=True)
 
 # routes that don't need to check for user/cache
 static_pages = [
@@ -165,7 +183,8 @@ class Media:
 
     @classmethod
     def wipe(cls):
-        for proc in cls.procs:
+        procs = list(cls.procs)  # Temp list of procs as Media.procs is updated
+        for proc in procs:
             end_proc(proc)
 
     @classmethod
@@ -188,7 +207,8 @@ def end_proc(proc: Media):
     if SYSTEM == "windows" and proc.runtime.poll() is None:
         Popen(f"TASKKILL /F /PID {proc.runtime.pid} /T", stdout=DEVNULL)
     else:
-        proc.runtime.terminate()
+        if proc.runtime.poll() is None:
+            proc.runtime.terminate()
     Media.procs.remove(proc)
     logger.debug(f"Terminating process {dict(proc.info)}")
 
@@ -480,7 +500,7 @@ def index():
     return bt.template("index.html",
                        user=User.get_or_none(),
                        streams=streams,
-                       chat_params=config["USER"]["chat params"])
+                       config=config["USER"])
 
 
 @bt.route("/login")
@@ -589,7 +609,7 @@ def channel(channel, mode="default", data=None, stream=None):
             vods=vods,
             vod_type=vod_type,
             pagination=pagination,
-            chat_params=config["USER"]["chat params"],
+            config=config["USER"],
         )
 
     elif mode == "clips":
@@ -611,7 +631,7 @@ def channel(channel, mode="default", data=None, stream=None):
             started_at=started_at,
             ended_at=ended_at,
             pagination=pagination,
-            chat_params=config["USER"]["chat params"],
+            config=config["USER"],
         )
 
     elif mode == "default":
@@ -620,7 +640,7 @@ def channel(channel, mode="default", data=None, stream=None):
         return bt.template("channel.html",
                            channel=streamer,
                            stream=stream,
-                           chat_params=config["USER"]["chat params"])
+                           config=config["USER"])
 
 
 @bt.route("/c")
@@ -658,7 +678,7 @@ def category(category_id=None):
         game=game,
         streams=streams,
         pagination=pagination,
-        chat_params=config["USER"]["chat params"],
+        config=config["USER"],
     )
 
 
@@ -668,7 +688,7 @@ def following():
         Streamer.select()
         .where(Streamer.followed == True)
         .order_by(pw.fn.LOWER(Streamer.display_name))
-        )
+    )
     return bt.template("following.html", follows=follows)
 
 
@@ -831,22 +851,25 @@ def cli() -> argparse.ArgumentParser:
         description="Web GUI for streamlink cli with Twitch account integration"
     )
     actions = parser.add_mutually_exclusive_group()
-    actions.add_argument("--reset", action="store_true",
-                         help="reset config file")
     actions.add_argument(
-        "--logout", action="store_true", help="remove user from app, prompt login again"
+        "--reset",
+        action="store_true", help="reset config file")
+    actions.add_argument(
+        "--logout",
+        action="store_true", help="remove user from app, prompt login again"
     )
     actions.add_argument(
-        "-c", "--clear-data", action="store_true", help="remove all user data and cache"
+        "-c", "--clear-data",
+        action="store_true", help="remove all user data and cache"
     )
     actions.add_argument(
-        "-d", "--dump-cache", action="store_true", help="clear cache, stay logged in."
+        "-d", "--debug",
+        action="store_const", dest="loglevel", const=logging.DEBUG,
+        default=logging.INFO, help="Add debug logs to output stream"
     )
     actions.add_argument(
-        "-v",
-        "--version",
-        action="version",
-        version=f"twottle v{twottle.__version__}",
+        "-v", "--version",
+        action="version", version=f"twottle v{twottle.__version__}",
     )
     return parser
 
@@ -854,20 +877,23 @@ def cli() -> argparse.ArgumentParser:
 def main():
     parser = cli()
     args = parser.parse_args()
+    mk_cache_dir()
+    set_logger(args.loglevel)
     if args.reset:
         config.reset()
     elif args.clear_data:
         db.drop_tables([User, Streamer, Game])
         shutil.rmtree(cache_path)
+        mk_cache_dir()
     elif args.logout:
         db.drop_tables([User])
-    elif args.dump_cache:
-        db.drop_tables([Streamer, Game])
     else:
         logger.info("Go to http://localhost:8080")
         try:
             waitress.serve(app=bt.app(), host="localhost",
                            threads=32, _quiet=True)
+        except OSError:
+            logger.info("localhost:8080 already in use")
         except KeyboardInterrupt:
             pass
         finally:
