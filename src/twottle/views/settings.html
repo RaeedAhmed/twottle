@@ -1,5 +1,9 @@
 % rebase('base.html', title="Settings")
-
+<style>
+    p a {
+        color: blueviolet;
+    }
+</style>
 <form action="/settings" method="POST">
     % for setting, value in sorted(list(user.items())):
     <div class="settings">
@@ -17,6 +21,17 @@
     <button name="reset" value="true" class="settings">Restore Defaults</button>
 </form>
 
+% if changes:
+<h2>Changes:</h2>
 % for change in changes:
 <p>{{change}}</p>
 % end
+% end
+
+<h2>Help</h2>
+<p>one instance: true or false. If true, all other streams close upon launching a new one</p>
+<p>media player: <a href="https://streamlink.github.io/cli.html?highlight=quality#player-options">Syntax</a> with players listed <a href="https://streamlink.github.io/players.html">here</a></p>
+<p>video quality: See <a href="https://streamlink.github.io/cli.html#cmdoption-stream-sorting-excludes">how to filter quality</a></p>
+<p>chat params: Apply chat window params described in <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/open">window.popup()</a></p>
+<br>
+
