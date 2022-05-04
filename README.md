@@ -6,7 +6,8 @@ Works on all platforms (Win/Mac/Linux/BSD)
 
 ### Dependencies
 - `python >=3.10` (Can relax requirement upon request)
-- `streamlink` (via pip/binaries/brew/source explained [here](https://streamlink.github.io/install.html#))
+  - `streamlink` (via pip/binaries/brew/source explained [here](https://streamlink.github.io/install.html#))
+  - `yt-dlp` [repo](https://github.com/yt-dlp/yt-dlp)
 - multimedia player listed [here](https://streamlink.github.io/players.html#player-compatibility)
   - Windows: player must be in system PATH
 
@@ -29,7 +30,7 @@ options:
   --reset           reset config file
   --logout          remove user from app, prompt login again
   -c, --clear-data  remove all user data and cache
-  -d, --dump-cache  clear cache, stay logged in.
+  -d, --debug       Add debug logs to output stream
   -v, --version     show program's version number and exit
 ```
 Run `twottle` to begin. On first startup you will be prompted to login and will be redirected to Twitch oauth.
