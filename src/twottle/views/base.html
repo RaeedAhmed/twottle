@@ -19,8 +19,8 @@
     </script>
     % end
     <script type="text/javascript">
-        function popup(url, params) {
-            newwin = window.open(url, 'chatWindow', params);
+        function popup(url, channel, params) {
+            newwin = window.open(url, channel, params);
             if (window.focus) { newwin.focus() }
             return false;
         }
