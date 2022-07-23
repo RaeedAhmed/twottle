@@ -744,6 +744,14 @@ def cache(ids: set[int], model: Game | Streamer) -> None:
         model.create(**datum)
 
 
+def timestamp(elapsed: int) -> str:
+    delta = str(timedelta(seconds=elapsed))
+    if "d" in delta:
+        d = delta[: (delta.find("d") - 1)] + "d"
+    h, m, _ = delta.split(" ")[-1].split(":")
+    return f"{d}{h}h{m}m"
+
+
 def time_elapsed(begin: str, d="") -> str:
     """start: UTC time"""
     start = datetime.strptime(
@@ -751,14 +759,6 @@ def time_elapsed(begin: str, d="") -> str:
     current = datetime.now(tz=timezone.utc)
     elapsed = round((current - start).total_seconds())
     return timestamp(elapsed)
-
-
-def timestamp(elapsed: int) -> str:
-    delta = str(timedelta(seconds=elapsed))
-    if "d" in delta:
-        d = delta[: (delta.find("d") - 1)] + "d"
-    h, m, _ = delta.split(" ")[-1].split(":")
-    return f"{d}{h}h{m}m"
 
 
 def watch_video(info: bt.FormsDict):
@@ -809,8 +809,7 @@ def process_clips(clips: list[dict]) -> list[Clip]:
             clip["box_art_url"] = game.box_art_url
             clip["game_name"] = game.name
         if vod := clip["video_id"]:
-            timestamp = timestamp(clip['vod_offset'])
-            clip["vod_link"] = f"http://www.twitch.tv/videos/{vod}/?t={timestamp}"
+            clip["vod_link"] = f"http://www.twitch.tv/videos/{vod}/?t={timestamp(clip['vod_offset'])}"
         else:
             clip["vod_link"] = None
     return [Clip(**{k: v for k, v in clip.items() if k in Clip._fields}) for clip in clips]
