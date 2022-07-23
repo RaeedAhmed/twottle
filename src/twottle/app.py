@@ -805,7 +805,7 @@ def process_clips(clips: list[dict]) -> list[Clip]:
             clip["box_art_url"] = game.box_art_url
             clip["game_name"] = game.name
         if vod := clip["video_id"]:
-            timestamp = time_elapsed(int(clip['vod_offset']))
+            timestamp = time_elapsed(clip['vod_offset'])
             clip["vod_link"] = f"http://www.twitch.tv/videos/{vod}/?t={timestamp}"
         else:
             clip["vod_link"] = None
