@@ -750,6 +750,10 @@ def time_elapsed(begin: str, d="") -> str:
         begin, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     current = datetime.now(tz=timezone.utc)
     elapsed = round((current - start).total_seconds())
+    return timestamp(elapsed)
+
+
+def timestamp(elapsed: int) -> str:
     delta = str(timedelta(seconds=elapsed))
     if "d" in delta:
         d = delta[: (delta.find("d") - 1)] + "d"
@@ -805,7 +809,7 @@ def process_clips(clips: list[dict]) -> list[Clip]:
             clip["box_art_url"] = game.box_art_url
             clip["game_name"] = game.name
         if vod := clip["video_id"]:
-            timestamp = time_elapsed(clip['vod_offset'])
+            timestamp = timestamp(clip['vod_offset'])
             clip["vod_link"] = f"http://www.twitch.tv/videos/{vod}/?t={timestamp}"
         else:
             clip["vod_link"] = None
