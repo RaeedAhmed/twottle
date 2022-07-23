@@ -804,38 +804,9 @@ def process_clips(clips: list[dict]) -> list[Clip]:
             game: Game = Game.get(int(clip["game_id"]))
             clip["box_art_url"] = game.box_art_url
             clip["game_name"] = game.name
-    to_fetch = [vod_id for clip in clips if (vod_id := clip["video_id"])]
-    vods: list[dict] = asyncio.run(AsyncRequest("/videos").get(to_fetch))
-    for clip in clips:
-        if clip["video_id"]:
-            clip["vod"] = vods.pop(0)  # Consume vod if vod exists for clip
-            vod_id, timestamp = clip["video_id"], clip["created_at"]
-            vod_start = datetime.strptime(
-                clip["vod"]["created_at"], "%Y-%m-%dT%H:%M:%SZ"
-            ).replace(tzinfo=timezone.utc)
-            timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
-                tzinfo=timezone.utc
-            )
-            elapsed = round(
-                (timestamp - vod_start).total_seconds() - int(float(clip["duration"]) + 0.5))
-            duration = clip["vod"]["duration"]
-            if "h" not in duration:
-                duration = f"0h{duration}"
-            if "m" not in duration:
-                a, b = duration.split("h")
-                duration = a + "h0m" + b
-            clip["vod"]["duration"] = duration
-            vd = datetime.strptime(clip["vod"]["duration"], "%Hh%Mm%Ss").time()
-            vod_duration = timedelta(
-                hours=vd.hour, minutes=vd.minute, seconds=vd.second).total_seconds()
-            if elapsed > vod_duration:
-                clip["vod_link"] = f"http://www.twitch.tv/videos/{vod_id}/"
-            else:
-                minutes, seconds = divmod(elapsed, 60)
-                hours, minutes = divmod(minutes, 60)
-                clip[
-                    "vod_link"
-                ] = f"http://www.twitch.tv/videos/{vod_id}/?t={hours}h{minutes}m{seconds}s"
+        if vod := clip["video_id"]:
+            timestamp = time_elapsed(int(clip['vod_offset']))
+            clip["vod_link"] = f"http://www.twitch.tv/videos/{vod}/?t={timestamp}"
         else:
             clip["vod_link"] = None
     return [Clip(**{k: v for k, v in clip.items() if k in Clip._fields}) for clip in clips]
