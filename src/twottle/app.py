@@ -744,14 +744,14 @@ def cache(ids: set[int], model: Game | Streamer) -> None:
         model.create(**datum)
 
 
-def timestamp(elapsed: int, seconds=False, d="") -> str:
+def timestamp(elapsed: int, seconds="", d="") -> str:
     delta = str(timedelta(seconds=elapsed))
     if "d" in delta:
         d = delta[: (delta.find("d") - 1)] + "d"
     h, m, s = delta.split(" ")[-1].split(":")
     if seconds:
-        seconds = s
-    return f"{d}{h}h{m}m{s}s"
+        seconds = f"{s}s"
+    return f"{d}{h}h{m}m{seconds}"
 
 
 def time_elapsed(begin: str) -> str:
