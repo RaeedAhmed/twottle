@@ -403,10 +403,10 @@ def get_user(access_token: str) -> None:
 
 
 def get_follows() -> set[int]:
-    endpoint = "/users/follows"
-    params = {"from_id": User.get().id, "first": "100"}
+    endpoint = "/channels/followed"
+    params = {"user_id": User.get().id, "first": "100"}
     resp = Request(endpoint, params).get_iter()
-    return {int(follow["to_id"]) for follow in resp}
+    return {int(follow["broadcaster_id"]) for follow in resp}
 
 
 def update_follows() -> None:
